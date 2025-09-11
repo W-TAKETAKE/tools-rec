@@ -10,11 +10,12 @@
             padding: 0;
             height: 100%;
             overflow: hidden;
-            font-family: sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         .container {
-            width: 600px;
-            height: 200px;
+            width: 400px;
+            height: 300px;
             position: absolute;
             top: 50%;
             left: 50%;
@@ -24,152 +25,329 @@
             justify-content: center;
             align-items: center;
             text-align: center;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 25px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
         }
-        h1 {
-            margin-top: 0;
-            margin-bottom: 15px;
+        
+        .record-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 6px solid #ff4757;
+            background: linear-gradient(135deg, #ff6b7a, #ff4757);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 30px;
+            position: relative;
+            box-shadow: 0 8px 25px rgba(255, 71, 87, 0.4);
         }
-        button { 
-            padding: 10px 15px; 
-            margin: 0 5px; 
-            cursor: pointer; 
+        
+        .record-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 12px 35px rgba(255, 71, 87, 0.6);
         }
-        .button-group {
-            margin-bottom: 10px;
+        
+        .record-button:active {
+            transform: scale(0.95);
         }
-        .status { 
-            color: #666; 
+        
+        .record-button.recording {
+            background: linear-gradient(135deg, #ff3742, #c92a2a);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        .record-button.recording::after {
+            content: '';
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border: 3px solid rgba(255, 71, 87, 0.3);
+            border-radius: 50%;
+            animation: ripple 2s ease-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        @keyframes ripple {
+            0% {
+                transform: scale(0.8);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1.4);
+                opacity: 0;
+            }
+        }
+        
+        .icon {
+            font-size: 45px;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .record-button.recording .icon {
+            font-size: 35px;
+        }
+        
+        .status {
+            color: #495057;
+            font-size: 16px;
+            font-weight: 500;
+            min-height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #28a745;
+            display: none;
+            animation: blink 1s ease-in-out infinite;
+        }
+        
+        .status-dot.recording {
+            display: block;
+            background: #dc3545;
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        .timer {
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            font-weight: bold;
+            color: #dc3545;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .timer.active {
+            display: block;
+        }
+        
+        .app-title {
+            position: absolute;
+            top: 30px;
+            font-size: 28px;
+            font-weight: 700;
+            color: #495057;
+            margin: 0;
+        }
+        
+        .hints {
+            position: absolute;
+            bottom: 20px;
+            font-size: 12px;
+            color: #6c757d;
+            text-align: center;
+            line-height: 1.4;
         }
     </style>
-    <script>
-        // ウィンドウのサイズを設定
-        window.onload = function() {
-            window.resizeTo(600, 200);
-        };
-    </script>
 </head>
 <body>
     <div class="container">
-        <h1>R</h1>
-        <div class="button-group">
-            <button id="start">録画開始</button>
-            <button id="stop" disabled>録画停止</button>
+        
+        <button class="record-button" id="recordButton">
+            <span class="icon" id="recordIcon">●</span>
+        </button>
+        
+        <div class="status" id="status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">クリックして録画開始</span>
         </div>
-        <div class="status" id="status"></div>
+        
+        <div class="timer" id="timer">00:00</div>
+        
     </div>
+
     <script>
         let mediaRecorder;
         let recordedChunks = [];
-        let displayStream; // 変数をグローバルスコープに移動
-        let recordingStartTime; // 録画開始時間を保存する変数を追加
+        let displayStream;
+        let recordingStartTime;
+        let timerInterval;
+        let isRecording = false;
+        
+        const recordButton = document.getElementById('recordButton');
+        const recordIcon = document.getElementById('recordIcon');
         const statusElement = document.getElementById('status');
+        const statusText = document.getElementById('statusText');
+        const statusDot = document.getElementById('statusDot');
+        const timerElement = document.getElementById('timer');
+        
         // 基本ファイル名（ここを変更してください）
-        const baseFileName = "";
+        const baseFileName = "recording";
 
-        document.getElementById('start').addEventListener('click', async () => {
-            try {
-                // 録画開始時の日時を記録
-                recordingStartTime = new Date();
+        // ウィンドウのサイズを設定
+        window.onload = function() {
+            window.resizeTo(400, 300);
+        };
 
-                // displayMediaのオプションでシステム音声を含める
-                displayStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { frameRate: 30 },
-                    audio: true // これによりシステム音声が含まれる
-                });
-                
-                let combinedStream;
-                
+        function updateTimer() {
+            if (!recordingStartTime) return;
+            
+            const now = new Date();
+            const elapsed = Math.floor((now - recordingStartTime) / 1000);
+            const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const seconds = (elapsed % 60).toString().padStart(2, '0');
+            timerElement.textContent = `${minutes}:${seconds}`;
+        }
+
+        function startRecording() {
+            recordingStartTime = new Date();
+            isRecording = true;
+            
+            // UI更新
+            recordButton.classList.add('recording');
+            recordIcon.textContent = '⏹';
+            statusText.textContent = '録画中...';
+            statusDot.classList.add('recording');
+            timerElement.classList.add('active');
+            
+            // タイマー開始
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            
+            // UI更新
+            recordButton.classList.remove('recording');
+            recordIcon.textContent = '●';
+            statusText.textContent = '処理中...';
+            statusDot.classList.remove('recording');
+            timerElement.classList.remove('active');
+            
+            // タイマー停止
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        recordButton.addEventListener('click', async () => {
+            if (!isRecording) {
                 try {
-                    // マイク音声を取得
-                    const micStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: { 
-                            echoCancellation: true,
-                            noiseSuppression: true
-                        } 
+                    // 録画開始
+                    startRecording();
+                    
+                    // displayMediaのオプションでシステム音声を含める
+                    displayStream = await navigator.mediaDevices.getDisplayMedia({
+                        video: { frameRate: 30 },
+                        audio: true
                     });
                     
-                    // システム音声とマイク音声のトラックを結合
-                    const audioContext = new AudioContext();
-                    const destination = audioContext.createMediaStreamDestination();
+                    let combinedStream;
                     
-                    if (displayStream.getAudioTracks().length > 0) {
-                        const systemSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
-                        systemSource.connect(destination);
-                        statusElement.textContent = "システム音声とマイク音声を含めて録画しています...";
-                    } else {
-                        statusElement.textContent = "システム音声が取得できませんでした。マイク音声のみ含めて録画します...";
+                    try {
+                        // マイク音声を取得
+                        const micStream = await navigator.mediaDevices.getUserMedia({ 
+                            audio: { 
+                                echoCancellation: true,
+                                noiseSuppression: true
+                            } 
+                        });
+                        
+                        // システム音声とマイク音声のトラックを結合
+                        const audioContext = new AudioContext();
+                        const destination = audioContext.createMediaStreamDestination();
+                        
+                        if (displayStream.getAudioTracks().length > 0) {
+                            const systemSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
+                            systemSource.connect(destination);
+                            statusText.textContent = "🎤 システム音声 + マイク";
+                        } else {
+                            statusText.textContent = "🎤 マイクのみ録画中";
+                        }
+                        
+                        const micSource = audioContext.createMediaStreamSource(micStream);
+                        micSource.connect(destination);
+                        
+                        // 映像トラックと結合した音声トラックを持つストリームを作成
+                        combinedStream = new MediaStream([
+                            ...displayStream.getVideoTracks(),
+                            ...destination.stream.getAudioTracks()
+                        ]);
+                        
+                    } catch (micError) {
+                        console.error("マイク音声の取得に失敗しました:", micError);
+                        statusText.textContent = "🔇 システム音声のみ";
+                        combinedStream = displayStream;
                     }
                     
-                    const micSource = audioContext.createMediaStreamSource(micStream);
-                    micSource.connect(destination);
+                    // MediaRecorderの設定
+                    mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
                     
-                    // 映像トラックと結合した音声トラックを持つストリームを作成
-                    combinedStream = new MediaStream([
-                        ...displayStream.getVideoTracks(),
-                        ...destination.stream.getAudioTracks()
-                    ]);
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) recordedChunks.push(event.data);
+                    };
                     
-                } catch (micError) {
-                    console.error("マイク音声の取得に失敗しました:", micError);
-                    statusElement.textContent = "マイクへのアクセスができませんでした。システム音声のみ含めて録画します...";
-                    combinedStream = displayStream;
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        
+                        // 録画開始時の日時からファイル名を生成
+                        const year = recordingStartTime.getFullYear();
+                        const month = (recordingStartTime.getMonth() + 1).toString().padStart(2, '0');
+                        const day = recordingStartTime.getDate().toString().padStart(2, '0');
+                        const hours = recordingStartTime.getHours().toString().padStart(2, '0');
+                        const minutes = recordingStartTime.getMinutes().toString().padStart(2, '0');
+                        const seconds = recordingStartTime.getSeconds().toString().padStart(2, '0');
+                        
+                        const fileName = `${baseFileName}_${year}${month}${day}_${hours}${minutes}${seconds}.webm`;
+                        
+                        // 自動ダウンロード
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        
+                        statusText.textContent = "✅ 録画完了！保存されました";
+                        recordedChunks = [];
+                        
+                        // 3秒後に初期状態に戻す
+                        setTimeout(() => {
+                            statusText.textContent = "クリックして録画開始";
+                        }, 3000);
+                    };
+                    
+                    mediaRecorder.start();
+                    
+                } catch (err) {
+                    console.error("画面共有の開始中にエラーが発生しました:", err);
+                    statusText.textContent = "❌ エラー: " + err.message;
+                    stopRecording();
                 }
-                
-                // MediaRecorderの設定
-                mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) recordedChunks.push(event.data);
-                };
-                
-                mediaRecorder.onstop = () => {
-                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    const url = URL.createObjectURL(blob);
+            } else {
+                // 録画停止
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                    stopRecording();
                     
-                    // 録画開始時の日時からファイル名を生成
-                    const year = recordingStartTime.getFullYear();
-                    const month = (recordingStartTime.getMonth() + 1).toString().padStart(2, '0');
-                    const day = recordingStartTime.getDate().toString().padStart(2, '0');
-                    const hours = recordingStartTime.getHours().toString().padStart(2, '0');
-                    const minutes = recordingStartTime.getMinutes().toString().padStart(2, '0');
-                    const seconds = recordingStartTime.getSeconds().toString().padStart(2, '0');
-                    
-                    // 要件に合わせたファイル名形式: ファイル名_yyyymmdd_hhmmss.webm
-                    const fileName = `${baseFileName}_${year}${month}${day}_${hours}${minutes}${seconds}.webm`;
-                    
-                    // 名前を付けて保存ダイアログを自動的に表示する
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = fileName;
-                    document.body.appendChild(a);
-                    a.click(); // 自動的にダウンロードダイアログを表示
-                    document.body.removeChild(a); // 使用後に要素を削除
-                    
-                    statusElement.textContent = "録画が完了しました。ファイルの保存ダイアログが表示されています。";
-                    recordedChunks = [];
-                };
-                
-                mediaRecorder.start();
-                document.getElementById('start').disabled = true;
-                document.getElementById('stop').disabled = false;
-                
-            } catch (err) {
-                console.error("画面共有の開始中にエラーが発生しました:", err);
-                statusElement.textContent = "エラー: " + err.message;
-            }
-        });
-        
-        document.getElementById('stop').addEventListener('click', () => {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-                document.getElementById('start').disabled = false;
-                document.getElementById('stop').disabled = true;
-                
-                // 画面共有を停止する
-                if (displayStream) {
-                    displayStream.getTracks().forEach(track => {
-                        track.stop();
-                    });
+                    // 画面共有を停止する
+                    if (displayStream) {
+                        displayStream.getTracks().forEach(track => {
+                            track.stop();
+                        });
+                    }
                 }
             }
         });
