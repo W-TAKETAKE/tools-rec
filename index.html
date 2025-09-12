@@ -192,7 +192,7 @@
         const timerElement = document.getElementById('timer');
         
         // 基本ファイル名（ここを変更してください）
-        const baseFileName = "recording";
+        const baseFileName = "screen-recording";
 
         // ウィンドウのサイズを設定
         window.onload = function() {
@@ -310,7 +310,7 @@
                         const minutes = recordingStartTime.getMinutes().toString().padStart(2, '0');
                         const seconds = recordingStartTime.getSeconds().toString().padStart(2, '0');
                         
-                        const fileName = `${baseFileName}_${year}${month}${day}_${hours}${minutes}${seconds}.webm`;
+                        const fileName = `${baseFileName}-${year}-${month}-${day}-${hours}-${minutes}.webm`;
                         
                         // 自動ダウンロード
                         const a = document.createElement('a');
