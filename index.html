@@ -210,6 +210,9 @@
             recordingStartTime = new Date();
             isRecording = true;
             
+            // タイトルを録画中に変更
+            document.title = 'R●';
+            
             // UI更新
             recordButton.classList.add('recording');
             recordIcon.textContent = '⏹';
@@ -223,6 +226,9 @@
 
         function stopRecording() {
             isRecording = false;
+            
+            // タイトルを元に戻す
+            document.title = 'R';
             
             // UI更新
             recordButton.classList.remove('recording');
