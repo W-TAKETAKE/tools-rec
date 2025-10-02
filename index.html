@@ -61,6 +61,16 @@
             animation: pulse 1.5s ease-in-out infinite;
         }
         
+        .record-button.recording.warning {
+            background: linear-gradient(135deg, #ffd93d, #f9ca24);
+            border-color: #f39c12;
+            box-shadow: 0 8px 25px rgba(249, 202, 36, 0.4);
+        }
+        
+        .record-button.recording.warning:hover {
+            box-shadow: 0 12px 35px rgba(249, 202, 36, 0.6);
+        }
+        
         .record-button.recording::after {
             content: '';
             position: absolute;
@@ -69,6 +79,10 @@
             border: 3px solid rgba(255, 71, 87, 0.3);
             border-radius: 50%;
             animation: ripple 2s ease-out infinite;
+        }
+        
+        .record-button.recording.warning::after {
+            border-color: rgba(249, 202, 36, 0.3);
         }
         
         @keyframes pulse {
@@ -215,7 +229,7 @@
             
             // UI更新
             recordButton.classList.add('recording');
-            recordIcon.textContent = '⏹';
+            recordIcon.textContent = '■';
             statusText.textContent = '録画中...';
             statusDot.classList.add('recording');
             timerElement.classList.add('active');
@@ -232,6 +246,7 @@
             
             // UI更新
             recordButton.classList.remove('recording');
+            recordButton.classList.remove('warning');
             recordIcon.textContent = '●';
             statusText.textContent = '処理中...';
             statusDot.classList.remove('recording');
@@ -256,11 +271,12 @@
 		                audio: true
 		            });
 		            
-		            // ▼▼▼ 変更点 ▼▼▼
 		            // ユーザーが許可したこのタイミングで、録画状態のUIに切り替え、タイマーを開始する
 		            startRecording();
 		            
 		            let combinedStream;
+		            let hasSystemAudio = displayStream.getAudioTracks().length > 0;
+		            let hasMicAudio = false;
 		            
 		            try {
 		                // マイク音声を取得
@@ -271,16 +287,19 @@
 		                    } 
 		                });
 		                
+		                hasMicAudio = true;
+		                
 		                // システム音声とマイク音声のトラックを結合
 		                const audioContext = new AudioContext();
 		                const destination = audioContext.createMediaStreamDestination();
 		                
-		                if (displayStream.getAudioTracks().length > 0) {
+		                if (hasSystemAudio) {
 		                    const systemSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
 		                    systemSource.connect(destination);
 		                    statusText.textContent = "🎤 システム音声 + マイク";
 		                } else {
-		                    statusText.textContent = "🎤 マイクのみ録画中";
+		                    statusText.innerHTML = "⚠️ システム音声なし（マイクのみ）";
+		                    recordButton.classList.add('warning');
 		                }
 		                
 		                const micSource = audioContext.createMediaStreamSource(micStream);
@@ -294,7 +313,13 @@
 		                
 		            } catch (micError) {
 		                console.error("マイク音声の取得に失敗しました:", micError);
-		                statusText.textContent = "🔇 システム音声のみ";
+		                
+		                if (hasSystemAudio) {
+		                    statusText.innerHTML = "⚠️ マイクなし（システム音声のみ）";
+		                } else {
+		                    statusText.innerHTML = "⚠️ 音声なし（映像のみ録画）";
+		                }
+		                recordButton.classList.add('warning');
 		                combinedStream = displayStream;
 		            }
 		            
