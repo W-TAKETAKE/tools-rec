@@ -192,11 +192,13 @@
 
     <script>
         let mediaRecorder;
-        let recordedChunks = [];
         let displayStream;
         let recordingStartTime;
         let timerInterval;
         let isRecording = false;
+        let fileHandle;
+        let writableStream;
+        let writer;
         
         const recordButton = document.getElementById('recordButton');
         const recordIcon = document.getElementById('recordIcon');
@@ -259,132 +261,203 @@
             }
         }
 
-		recordButton.addEventListener('click', async () => {
-		    if (!isRecording) {
-		        try {
-		            // 許可を待つ間のメッセージを表示
-		            statusText.textContent = '共有する画面を選択してください...';
+        // File System Access APIが利用可能かチェック
+        function isFileSystemAccessSupported() {
+            return 'showSaveFilePicker' in window;
+        }
 
-		            // displayMediaで画面共有の許可を求める (ユーザーが許可するまでここで待機)
-		            displayStream = await navigator.mediaDevices.getDisplayMedia({
-		                video: { frameRate: 30 },
-		                audio: true
-		            });
-		            
-		            // ユーザーが許可したこのタイミングで、録画状態のUIに切り替え、タイマーを開始する
-		            startRecording();
-		            
-		            let combinedStream;
-		            let hasSystemAudio = displayStream.getAudioTracks().length > 0;
-		            let hasMicAudio = false;
-		            
-		            try {
-		                // マイク音声を取得
-		                const micStream = await navigator.mediaDevices.getUserMedia({ 
-		                    audio: { 
-		                        echoCancellation: true,
-		                        noiseSuppression: true
-		                    } 
-		                });
-		                
-		                hasMicAudio = true;
-		                
-		                // システム音声とマイク音声のトラックを結合
-		                const audioContext = new AudioContext();
-		                const destination = audioContext.createMediaStreamDestination();
-		                
-		                if (hasSystemAudio) {
-		                    const systemSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
-		                    systemSource.connect(destination);
-		                    statusText.textContent = "🎤 システム音声 + マイク";
-		                } else {
-		                    statusText.innerHTML = "⚠️ システム音声なし（マイクのみ）";
-		                    recordButton.classList.add('warning');
-		                }
-		                
-		                const micSource = audioContext.createMediaStreamSource(micStream);
-		                micSource.connect(destination);
-		                
-		                // 映像トラックと結合した音声トラックを持つストリームを作成
-		                combinedStream = new MediaStream([
-		                    ...displayStream.getVideoTracks(),
-		                    ...destination.stream.getAudioTracks()
-		                ]);
-		                
-		            } catch (micError) {
-		                console.error("マイク音声の取得に失敗しました:", micError);
-		                
-		                if (hasSystemAudio) {
-		                    statusText.innerHTML = "⚠️ マイクなし（システム音声のみ）";
-		                } else {
-		                    statusText.innerHTML = "⚠️ 音声なし（映像のみ録画）";
-		                }
-		                recordButton.classList.add('warning');
-		                combinedStream = displayStream;
-		            }
-		            
-		            // MediaRecorderの設定
-		            mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
-		            
-		            mediaRecorder.ondataavailable = (event) => {
-		                if (event.data.size > 0) recordedChunks.push(event.data);
-		            };
-		            
-		            mediaRecorder.onstop = () => {
-		                const blob = new Blob(recordedChunks, { type: 'video/webm' });
-		                const url = URL.createObjectURL(blob);
-		                
-		                const year = recordingStartTime.getFullYear();
-		                const month = (recordingStartTime.getMonth() + 1).toString().padStart(2, '0');
-		                const day = recordingStartTime.getDate().toString().padStart(2, '0');
-		                const hours = recordingStartTime.getHours().toString().padStart(2, '0');
-		                const minutes = recordingStartTime.getMinutes().toString().padStart(2, '0');
-		                const seconds = recordingStartTime.getSeconds().toString().padStart(2, '0');
-		                
-		                const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_screen-record.webm`;
-		                
-		                const a = document.createElement('a');
-		                a.href = url;
-		                a.download = fileName;
-		                document.body.appendChild(a);
-		                a.click();
-		                document.body.removeChild(a);
-		                
-		                statusText.textContent = "✅ 録画完了！保存されました";
-		                recordedChunks = [];
-		                
-		                setTimeout(() => {
-		                    statusText.textContent = "クリックして録画開始";
-		                }, 3000);
-		            };
-		            
-		            mediaRecorder.start();
-		            
-		        } catch (err) {
-		            console.error("画面共有の開始中にエラーが発生しました:", err);
-		            // UIを元に戻す
-		            stopRecording();
-		            // キャンセルされたことを伝えるメッセージに変更
-		            statusText.textContent = "❌ 録画がキャンセルされました";
-		            // 3秒後に初期状態のメッセージに戻す
-		            setTimeout(() => {
-		                statusText.textContent = "クリックして録画開始";
-		            }, 3000);
-		        }
-		    } else {
-		        // 録画停止
-		        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-		            mediaRecorder.stop();
-		            stopRecording();
-		            
-		            if (displayStream) {
-		                displayStream.getTracks().forEach(track => {
-		                    track.stop();
-		                });
-		            }
-		        }
-		    }
-		});
+        async function setupFileWriter() {
+            if (!isFileSystemAccessSupported()) {
+                console.log('File System Access APIが利用できません。メモリモードで動作します。');
+                return false;
+            }
+
+            try {
+                const year = recordingStartTime.getFullYear();
+                const month = (recordingStartTime.getMonth() + 1).toString().padStart(2, '0');
+                const day = recordingStartTime.getDate().toString().padStart(2, '0');
+                const hours = recordingStartTime.getHours().toString().padStart(2, '0');
+                const minutes = recordingStartTime.getMinutes().toString().padStart(2, '0');
+                const seconds = recordingStartTime.getSeconds().toString().padStart(2, '0');
+                
+                const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画_.webm`;
+
+                fileHandle = await window.showSaveFilePicker({
+                    suggestedName: fileName,
+                    types: [{
+                        description: 'WebM Video',
+                        accept: { 'video/webm': ['.webm'] }
+                    }]
+                });
+
+                writableStream = await fileHandle.createWritable();
+                return true;
+            } catch (err) {
+                console.error('ファイル保存ダイアログでエラー:', err);
+                return false;
+            }
+        }
+
+        recordButton.addEventListener('click', async () => {
+            if (!isRecording) {
+                try {
+                    // 許可を待つ間のメッセージを表示
+                    statusText.textContent = '共有する画面を選択してください...';
+
+                    // displayMediaで画面共有の許可を求める (ユーザーが許可するまでここで待機)
+                    displayStream = await navigator.mediaDevices.getDisplayMedia({
+                        video: { frameRate: 30 },
+                        audio: true
+                    });
+                    
+                    // ユーザーが許可したこのタイミングで、録画状態のUIに切り替え、タイマーを開始する
+                    startRecording();
+                    
+                    let combinedStream;
+                    let hasSystemAudio = displayStream.getAudioTracks().length > 0;
+                    let hasMicAudio = false;
+                    
+                    try {
+                        // マイク音声を取得
+                        const micStream = await navigator.mediaDevices.getUserMedia({ 
+                            audio: { 
+                                echoCancellation: true,
+                                noiseSuppression: true
+                            } 
+                        });
+                        
+                        hasMicAudio = true;
+                        
+                        // システム音声とマイク音声のトラックを結合
+                        const audioContext = new AudioContext();
+                        const destination = audioContext.createMediaStreamDestination();
+                        
+                        if (hasSystemAudio) {
+                            const systemSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
+                            systemSource.connect(destination);
+                            statusText.textContent = "🎤 システム音声 + マイク";
+                        } else {
+                            statusText.innerHTML = "⚠️ システム音声なし(マイクのみ)";
+                            recordButton.classList.add('warning');
+                        }
+                        
+                        const micSource = audioContext.createMediaStreamSource(micStream);
+                        micSource.connect(destination);
+                        
+                        // 映像トラックと結合した音声トラックを持つストリームを作成
+                        combinedStream = new MediaStream([
+                            ...displayStream.getVideoTracks(),
+                            ...destination.stream.getAudioTracks()
+                        ]);
+                        
+                    } catch (micError) {
+                        console.error("マイク音声の取得に失敗しました:", micError);
+                        
+                        if (hasSystemAudio) {
+                            statusText.innerHTML = "⚠️ マイクなし(システム音声のみ)";
+                        } else {
+                            statusText.innerHTML = "⚠️ 音声なし(映像のみ録画)";
+                        }
+                        recordButton.classList.add('warning');
+                        combinedStream = displayStream;
+                    }
+                    
+                    // ファイル書き込みの準備
+                    const canStreamToFile = await setupFileWriter();
+                    let recordedChunks = [];
+                    
+                    // MediaRecorderの設定
+                    mediaRecorder = new MediaRecorder(combinedStream, { 
+                        mimeType: 'video/webm',
+                        videoBitsPerSecond: 2500000 // 2.5Mbps
+                    });
+                    
+                    mediaRecorder.ondataavailable = async (event) => {
+                        if (event.data.size > 0) {
+                            if (canStreamToFile && writableStream) {
+                                // ストリーミング保存: データを直接ファイルに書き込み
+                                try {
+                                    await writableStream.write(event.data);
+                                    console.log(`書き込み: ${(event.data.size / 1024 / 1024).toFixed(2)} MB`);
+                                } catch (err) {
+                                    console.error('ファイル書き込みエラー:', err);
+                                }
+                            } else {
+                                // フォールバック: メモリに保存
+                                recordedChunks.push(event.data);
+                            }
+                        }
+                    };
+                    
+                    mediaRecorder.onstop = async () => {
+                        if (canStreamToFile && writableStream) {
+                            // ストリーミング保存の場合: ファイルを閉じる
+                            try {
+                                await writableStream.close();
+                                statusText.textContent = "✅ 録画完了!保存されました";
+                            } catch (err) {
+                                console.error('ファイルクローズエラー:', err);
+                                statusText.textContent = "❌ 保存エラーが発生しました";
+                            }
+                        } else {
+                            // フォールバック: メモリから保存
+                            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                            const url = URL.createObjectURL(blob);
+                            
+                            const year = recordingStartTime.getFullYear();
+                            const month = (recordingStartTime.getMonth() + 1).toString().padStart(2, '0');
+                            const day = recordingStartTime.getDate().toString().padStart(2, '0');
+                            const hours = recordingStartTime.getHours().toString().padStart(2, '0');
+                            const minutes = recordingStartTime.getMinutes().toString().padStart(2, '0');
+                            const seconds = recordingStartTime.getSeconds().toString().padStart(2, '0');
+                            
+                            const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画_.webm`;
+                            
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = fileName;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            
+                            statusText.textContent = "✅ 録画完了!保存されました";
+                        }
+                        
+                        recordedChunks = [];
+                        
+                        setTimeout(() => {
+                            statusText.textContent = "クリックして録画開始";
+                        }, 3000);
+                    };
+                    
+                    // 1秒ごとにチャンクを生成してストリーミング保存
+                    mediaRecorder.start(1000);
+                    
+                } catch (err) {
+                    console.error("画面共有の開始中にエラーが発生しました:", err);
+                    // UIを元に戻す
+                    stopRecording();
+                    // キャンセルされたことを伝えるメッセージに変更
+                    statusText.textContent = "❌ 録画がキャンセルされました";
+                    // 3秒後に初期状態のメッセージに戻す
+                    setTimeout(() => {
+                        statusText.textContent = "クリックして録画開始";
+                    }, 3000);
+                }
+            } else {
+                // 録画停止
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                    stopRecording();
+                    
+                    if (displayStream) {
+                        displayStream.getTracks().forEach(track => {
+                            track.stop();
+                        });
+                    }
+                }
+            }
+        });
     </script>
 </body>
 </html>
