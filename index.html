@@ -198,7 +198,6 @@
         let isRecording = false;
         let fileHandle;
         let writableStream;
-        let writer;
         
         const recordButton = document.getElementById('recordButton');
         const recordIcon = document.getElementById('recordIcon');
@@ -211,6 +210,42 @@
         window.onload = function() {
             window.resizeTo(400, 300);
         };
+
+        // エラー・警告音再生関数\
+        function playErrorSound() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                
+                const ctx = new AudioContext();
+                const now = ctx.currentTime;
+
+                // 音を鳴らすヘルパー関数
+                const createBeep = (startTime, duration) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+
+                    // 矩形波（少しレトロなブザー音）
+                    osc.type = 'square';
+                    
+                    // 音程: 500Hzから100Hzへ下がる（エラー・失敗感）
+                    osc.frequency.setValueAtTime(500, startTime);
+                    osc.frequency.linearRampToValueAtTime(100, startTime + duration);
+
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    osc.start(startTime);
+                    osc.stop(startTime + duration);
+                };
+
+                // 修正後の設定: 0.2秒後に1.0秒間の音を再生
+                createBeep(now + 0.2, 1.0);
+
+            } catch (e) {
+                console.error("Audio play error", e);
+            }
+        }
 
         function updateTimer() {
             if (!recordingStartTime) return;
@@ -226,27 +261,22 @@
             recordingStartTime = new Date();
             isRecording = true;
             
-            // タイトルを録画中に変更
             document.title = 'R●';
             
-            // UI更新
             recordButton.classList.add('recording');
             recordIcon.textContent = '■';
             statusText.textContent = '録画中...';
             statusDot.classList.add('recording');
             timerElement.classList.add('active');
             
-            // タイマー開始
             timerInterval = setInterval(updateTimer, 1000);
         }
 
         function stopRecording() {
             isRecording = false;
             
-            // タイトルを元に戻す
             document.title = 'R';
             
-            // UI更新
             recordButton.classList.remove('recording');
             recordButton.classList.remove('warning');
             recordIcon.textContent = '●';
@@ -254,21 +284,20 @@
             statusDot.classList.remove('recording');
             timerElement.classList.remove('active');
             
-            // タイマー停止
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
         }
 
-        // File System Access APIが利用可能かチェック
         function isFileSystemAccessSupported() {
             return 'showSaveFilePicker' in window;
         }
 
         async function setupFileWriter() {
             if (!isFileSystemAccessSupported()) {
-                console.log('File System Access APIが利用できません。メモリモードで動作します。');
+                playErrorSound(); // エラー音
+                alert('お使いのブラウザは直接ファイル保存に対応していません。\nChrome, Edge等の対応ブラウザをご利用ください。');
                 return false;
             }
 
@@ -301,16 +330,36 @@
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
-                    // 許可を待つ間のメッセージを表示
                     statusText.textContent = '共有する画面を選択してください...';
 
-                    // displayMediaで画面共有の許可を求める (ユーザーが許可するまでここで待機)
+                    // 高音質設定を含めた画面共有リクエスト
                     displayStream = await navigator.mediaDevices.getDisplayMedia({
                         video: { frameRate: 30 },
-                        audio: true
+                        audio: {
+                            channelCount: 2,
+                            echoCancellation: false,
+                            noiseSuppression: false,
+                            autoGainControl: false
+                        }
                     });
                     
-                    // ユーザーが許可したこのタイミングで、録画状態のUIに切り替え、タイマーを開始する
+                    recordingStartTime = new Date();
+                    
+                    statusText.textContent = '保存先を選択してください...';
+                    const canStreamToFile = await setupFileWriter();
+
+                    // キャンセルまたは保存不可の場合
+                    if (!canStreamToFile) {
+                        playErrorSound(); // エラー音再生
+                        
+                        displayStream.getTracks().forEach(track => track.stop());
+                        statusText.textContent = "❌ 保存がキャンセルされました";
+                        setTimeout(() => {
+                            statusText.textContent = "クリックして録画開始";
+                        }, 3000);
+                        return;
+                    }
+
                     startRecording();
                     
                     let combinedStream;
@@ -318,7 +367,6 @@
                     let hasMicAudio = false;
                     
                     try {
-                        // マイク音声を取得
                         const micStream = await navigator.mediaDevices.getUserMedia({ 
                             audio: { 
                                 echoCancellation: true,
@@ -328,9 +376,9 @@
                         
                         hasMicAudio = true;
                         
-                        // システム音声とマイク音声のトラックを結合
                         const audioContext = new AudioContext();
                         const destination = audioContext.createMediaStreamDestination();
+                        destination.channelCount = 2; // ステレオ固定
                         
                         if (hasSystemAudio) {
                             const systemSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
@@ -339,12 +387,12 @@
                         } else {
                             statusText.innerHTML = "⚠️ システム音声なし(マイクのみ)";
                             recordButton.classList.add('warning');
+                            playErrorSound(); // ★追加: システム音声が無い時に警告音を鳴らす
                         }
                         
                         const micSource = audioContext.createMediaStreamSource(micStream);
                         micSource.connect(destination);
                         
-                        // 映像トラックと結合した音声トラックを持つストリームを作成
                         combinedStream = new MediaStream([
                             ...displayStream.getVideoTracks(),
                             ...destination.stream.getAudioTracks()
@@ -362,84 +410,46 @@
                         combinedStream = displayStream;
                     }
                     
-                    // ファイル書き込みの準備
-                    const canStreamToFile = await setupFileWriter();
-                    let recordedChunks = [];
-                    
-                    // MediaRecorderの設定
                     mediaRecorder = new MediaRecorder(combinedStream, { 
-                        mimeType: 'video/webm',
-                        videoBitsPerSecond: 2500000 // 2.5Mbps
+                        mimeType: 'video/webm;codecs=vp9,opus',
+                        videoBitsPerSecond: 2500000
                     });
                     
                     mediaRecorder.ondataavailable = async (event) => {
-                        if (event.data.size > 0) {
-                            if (canStreamToFile && writableStream) {
-                                // ストリーミング保存: データを直接ファイルに書き込み
-                                try {
-                                    await writableStream.write(event.data);
-                                    console.log(`書き込み: ${(event.data.size / 1024 / 1024).toFixed(2)} MB`);
-                                } catch (err) {
-                                    console.error('ファイル書き込みエラー:', err);
-                                }
-                            } else {
-                                // フォールバック: メモリに保存
-                                recordedChunks.push(event.data);
+                        if (event.data.size > 0 && writableStream) {
+                            try {
+                                await writableStream.write(event.data);
+                                console.log(`書き込み: ${(event.data.size / 1024 / 1024).toFixed(2)} MB`);
+                            } catch (err) {
+                                console.error('ファイル書き込みエラー:', err);
                             }
                         }
                     };
                     
                     mediaRecorder.onstop = async () => {
-                        if (canStreamToFile && writableStream) {
-                            // ストリーミング保存の場合: ファイルを閉じる
+                        if (writableStream) {
                             try {
                                 await writableStream.close();
                                 statusText.textContent = "✅ 録画完了!保存されました";
                             } catch (err) {
+                                playErrorSound(); // 保存終了時エラー
                                 console.error('ファイルクローズエラー:', err);
                                 statusText.textContent = "❌ 保存エラーが発生しました";
                             }
-                        } else {
-                            // フォールバック: メモリから保存
-                            const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                            const url = URL.createObjectURL(blob);
-                            
-                            const year = recordingStartTime.getFullYear();
-                            const month = (recordingStartTime.getMonth() + 1).toString().padStart(2, '0');
-                            const day = recordingStartTime.getDate().toString().padStart(2, '0');
-                            const hours = recordingStartTime.getHours().toString().padStart(2, '0');
-                            const minutes = recordingStartTime.getMinutes().toString().padStart(2, '0');
-                            const seconds = recordingStartTime.getSeconds().toString().padStart(2, '0');
-                            
-                            const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画_.webm`;
-                            
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = fileName;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            
-                            statusText.textContent = "✅ 録画完了!保存されました";
                         }
-                        
-                        recordedChunks = [];
                         
                         setTimeout(() => {
                             statusText.textContent = "クリックして録画開始";
                         }, 3000);
                     };
                     
-                    // 1秒ごとにチャンクを生成してストリーミング保存
                     mediaRecorder.start(1000);
                     
                 } catch (err) {
+                    playErrorSound(); // 画面共有キャンセル等のエラー
                     console.error("画面共有の開始中にエラーが発生しました:", err);
-                    // UIを元に戻す
                     stopRecording();
-                    // キャンセルされたことを伝えるメッセージに変更
                     statusText.textContent = "❌ 録画がキャンセルされました";
-                    // 3秒後に初期状態のメッセージに戻す
                     setTimeout(() => {
                         statusText.textContent = "クリックして録画開始";
                     }, 3000);
