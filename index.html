@@ -13,14 +13,11 @@
             padding: 0;
             height: 100%;
             overflow: hidden;
-            /* スクロール防止 */
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #485563 0%, #29323c 100%);
             transition: background 0.8s ease;
-            /* 背景色変更時のアニメーション */
         }
 
-        /* 録画中の背景色変更クラス */
         body.recording-active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
@@ -29,12 +26,10 @@
         .container {
             width: 500px;
             height: 300px;
-            /* デフォルト(待機時)は小さく */
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            /* 中央寄せ */
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -44,17 +39,13 @@
             border-radius: 25px;
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
             backdrop-filter: blur(10px);
-            /* すりガラス効果 */
             padding: 20px;
             transition: height 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-            /* スムーズなアニメーション */
             overflow: hidden;
-            /* 中身がはみ出ないように */
         }
 
         .container.expanded {
             height: 520px;
-            /* 録画中は広げる */
         }
 
         /* === 録画ボタンのデザイン === */
@@ -92,18 +83,9 @@
             animation: pulse 1.5s ease-in-out infinite;
         }
 
-        .record-button.recording:hover {
-            box-shadow: 0 12px 35px rgba(255, 71, 87, 0.6);
-        }
-
         .record-button.recording.warning {
             background: linear-gradient(135deg, #ffd93d, #f9ca24);
             border-color: #f39c12;
-            box-shadow: 0 8px 25px rgba(249, 202, 36, 0.4);
-        }
-
-        .record-button.recording.warning:hover {
-            box-shadow: 0 12px 35px rgba(249, 202, 36, 0.6);
         }
 
         .record-button.recording::after {
@@ -116,35 +98,16 @@
             animation: ripple 2s ease-out infinite;
         }
 
-        .record-button.recording.warning::after {
-            border-color: rgba(249, 202, 36, 0.3);
-        }
-
         @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.7;
-            }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
         }
 
         @keyframes ripple {
-            0% {
-                transform: scale(0.8);
-                opacity: 1;
-            }
-
-            100% {
-                transform: scale(1.4);
-                opacity: 0;
-            }
+            0% { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(1.4); opacity: 0; }
         }
 
-        /* === アイコンとテキスト === */
         .icon {
             font-size: 40px;
             color: white;
@@ -182,15 +145,8 @@
         }
 
         @keyframes blink {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.3;
-            }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
 
         .timer {
@@ -218,13 +174,11 @@
             gap: 20px;
             opacity: 1;
             transition: opacity 0.5s ease 0.1s;
-            /* 少し遅れて表示 */
         }
 
         .visualizer-container.hidden {
             display: none;
             opacity: 0;
-            transition: opacity 0.2s ease;
         }
 
         .visualizer-box {
@@ -243,9 +197,7 @@
 
         canvas {
             background: #111;
-            /* 黒背景に変更 */
             border-radius: 4px;
-            /* 四角く */
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
             border: 1px solid #333;
         }
@@ -266,10 +218,9 @@
 
         <div class="timer" id="timer">00:00</div>
 
-        <!-- ビジュアライザー表示エリア -->
         <div class="visualizer-container hidden" id="visualizerContainer">
             <div class="visualizer-box">
-                <span class="visualizer-label">マイク入力</span>
+                <span class="visualizer-label">マイク音声</span>
                 <canvas id="micVisualizer" width="200" height="150"></canvas>
             </div>
             <div class="visualizer-box">
@@ -282,22 +233,13 @@
 
     <script>
         // === グローバル変数の定義 ===
-        let mediaRecorder;
-        let displayStream;
-        let recordingStartTime;
-        let timerInterval;
+        let mediaRecorder, displayStream, recordingStartTime, timerInterval;
         let isRecording = false;
-        let fileHandle;
-        let writableStream;
-
-        let audioContext;
-        let micAnalyser;
-        let sysAnalyser;
-        let animationId;
+        let fileHandle, writableStream;
+        let audioContext, micAnalyser, sysAnalyser, animationId;
 
         const recordButton = document.getElementById('recordButton');
         const recordIcon = document.getElementById('recordIcon');
-        const statusElement = document.getElementById('status');
         const statusText = document.getElementById('statusText');
         const statusDot = document.getElementById('statusDot');
         const timerElement = document.getElementById('timer');
@@ -314,37 +256,25 @@
 
         function playErrorSound() {
             try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (!AudioContext) return;
-
-                const ctx = new AudioContext();
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
                 const now = ctx.currentTime;
-
                 const createBeep = (startTime, duration) => {
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
-
                     osc.type = 'square';
                     osc.frequency.setValueAtTime(500, startTime);
                     osc.frequency.linearRampToValueAtTime(100, startTime + duration);
-
                     osc.connect(gain);
                     gain.connect(ctx.destination);
-
                     osc.start(startTime);
                     osc.stop(startTime + duration);
                 };
-
                 createBeep(now + 0.2, 1.0);
-
-            } catch (e) {
-                console.error("Audio play error", e);
-            }
+            } catch (e) {}
         }
 
         function updateTimer() {
             if (!recordingStartTime) return;
-
             const now = new Date();
             const elapsed = Math.floor((now - recordingStartTime) / 1000);
             const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
@@ -355,29 +285,22 @@
         function startRecording() {
             recordingStartTime = new Date();
             isRecording = true;
-
             document.title = 'R-Running';
-
             document.body.classList.add('recording-active');
             recordButton.classList.add('recording');
             recordIcon.textContent = '■';
             statusText.textContent = '録画中...';
             statusDot.classList.add('recording');
             timerElement.classList.add('active');
-
-            // UI拡張
             mainContainer.classList.add('expanded');
             visualizerContainer.classList.remove('hidden');
-
             timerInterval = setInterval(updateTimer, 1000);
             drawVisualizers();
         }
 
         function stopRecording() {
             isRecording = false;
-
             document.title = 'R';
-
             document.body.classList.remove('recording-active');
             recordButton.classList.remove('recording');
             recordButton.classList.remove('warning');
@@ -385,25 +308,13 @@
             statusText.textContent = '処理中...';
             statusDot.classList.remove('recording');
             timerElement.classList.remove('active');
-
-            // UI縮小
             mainContainer.classList.remove('expanded');
             visualizerContainer.classList.add('hidden');
-
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-            }
+            if (timerInterval) clearInterval(timerInterval);
+            if (animationId) cancelAnimationFrame(animationId);
             clearCanvas(micCtx, micCanvas);
             clearCanvas(sysCtx, sysCanvas);
-
-            if (audioContext && audioContext.state !== 'closed') {
-                audioContext.close();
-            }
+            if (audioContext && audioContext.state !== 'closed') audioContext.close();
         }
 
         function clearCanvas(ctx, canvas) {
@@ -413,100 +324,75 @@
 
         function drawVisualizers() {
             animationId = requestAnimationFrame(drawVisualizers);
-
-            // マイク描画 (赤基調)
-            // ノイズゲート: 80 (約31%) 以下の入力は無視する
-            drawSegmentedEqualizer(micAnalyser, micCtx, micCanvas.width, micCanvas.height, 'red', 80);
-
-            // システム音描画 (緑 -> オレンジ)
-            // ノイズゲート: 10
-            drawSegmentedEqualizer(sysAnalyser, sysCtx, sysCanvas.width, sysCanvas.height, 'green_orange', 10);
+            // マイク：本数をシステム音と合わせ（11本）、通常通り描画
+            drawSegmentedEqualizer(micAnalyser, micCtx, micCanvas.width, micCanvas.height, 'red', 80, false);
+            // システム音：左端を1本スキップして11本描画
+            drawSegmentedEqualizer(sysAnalyser, sysCtx, sysCanvas.width, sysCanvas.height, 'green_orange', 10, true);
         }
 
-        function drawSegmentedEqualizer(analyser, ctx, width, height, colorMode, noiseGate = 0) {
+        /* === ビジュアライザー描画コア関数 (改良版) === */
+        function drawSegmentedEqualizer(analyser, ctx, width, height, colorMode, noiseGate = 0, skipFirst = false) {
             ctx.fillStyle = '#111';
             ctx.fillRect(0, 0, width, height);
-
             if (!analyser) return;
 
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
 
-            const barCount = 16;
+            const barCount = 11; // 全体の表示本数を統一
             const barWidth = (width / barCount) - 2;
-
-            // セグメント設定
             const segmentHeight = 4;
             const segmentGap = 1;
             const maxSegments = Math.floor(height / (segmentHeight + segmentGap));
 
-            // 周波数範囲設定 (25Hz - 16kHz)
             const sampleRate = audioContext ? audioContext.sampleRate : 48000;
-            const minFreq = 25;
-            const maxFreq = 16000;
+            const minFreq = 120; // 重複を避けるため低域の開始を少し上げる
+            const maxFreq = 14000;
 
             const logMin = Math.log10(minFreq);
             const logMax = Math.log10(maxFreq);
-            const logStep = (logMax - logMin) / (barCount - 1);
-
+            const logStep = (logMax - logMin) / barCount;
             const binSize = (sampleRate / 2) / bufferLength;
 
             for (let i = 0; i < barCount; i++) {
-                const targetFreq = Math.pow(10, logMin + i * logStep);
+                // skipFirstがtrueならサンプリング地点を1つ分ずらす
+                const logicalIndex = i + (skipFirst ? 1 : 0);
+                
+                const targetFreq = Math.pow(10, logMin + logicalIndex * logStep);
                 let targetIndex = Math.floor(targetFreq / binSize);
-
-                if (targetIndex < 0) targetIndex = 0;
                 if (targetIndex >= bufferLength) targetIndex = bufferLength - 1;
 
-                const nextFreq = Math.pow(10, logMin + (i + 1) * logStep);
+                const nextFreq = Math.pow(10, logMin + (logicalIndex + 1) * logStep);
                 let nextIndex = Math.floor(nextFreq / binSize);
-                if (nextIndex >= bufferLength) nextIndex = bufferLength - 1;
-
-                let maxVal = 0;
+                if (nextIndex > bufferLength) nextIndex = bufferLength;
                 if (nextIndex <= targetIndex) nextIndex = targetIndex + 1;
 
+                let maxVal = 0;
                 for (let k = targetIndex; k < nextIndex; k++) {
-                    if (dataArray[k] > maxVal) {
-                        maxVal = dataArray[k];
-                    }
+                    if (dataArray[k] > maxVal) maxVal = dataArray[k];
                 }
 
-                // ノイズゲート処理
-                if (maxVal < noiseGate) {
-                    maxVal = 0;
-                }
+                if (maxVal < noiseGate) maxVal = 0;
 
-                // バーの高さ (0.0 - 1.0)
-                const percent = maxVal / 255;
-                const activeSegments = Math.floor(percent * maxSegments);
+                // 反応を鈍くする (左から5本は感度を0.4倍にする)
+                const sensitivity = (i < 5) ? 0.4 : 1.0;
+                const activeSegments = Math.floor((maxVal / 255) * sensitivity * maxSegments);
 
                 const x = i * (barWidth + 2) + 1;
 
-                // 通常のバー描画
                 for (let j = 0; j < maxSegments; j++) {
                     const y = height - ((j + 1) * (segmentHeight + segmentGap));
-
                     if (j < activeSegments) {
+                        const hue = j / maxSegments;
                         if (colorMode === 'green_orange') {
-                            const hue = j / maxSegments;
-                            if (hue > 0.8) {
-                                ctx.fillStyle = '#ff4757';
-                            } else if (hue > 0.5) {
-                                ctx.fillStyle = '#ffa502';
-                            } else {
-                                ctx.fillStyle = '#2ed573';
-                            }
+                            if (hue > 0.8) ctx.fillStyle = '#ff4757';
+                            else if (hue > 0.5) ctx.fillStyle = '#ffa502';
+                            else ctx.fillStyle = '#2ed573';
                         } else {
-                            // 赤基調 (段階表示: 赤 -> オレンジ -> 黄)
-                            const hue = j / maxSegments;
-                            if (hue > 0.8) {
-                                ctx.fillStyle = '#fffa65'; // Yellow (High level)
-                            } else if (hue > 0.5) {
-                                ctx.fillStyle = '#ffa502'; // Orange (Mid level)
-                            } else {
-                                ctx.fillStyle = '#ff4757'; // Red (Base level)
-                            }
+                            if (hue > 0.8) ctx.fillStyle = '#fffa65';
+                            else if (hue > 0.5) ctx.fillStyle = '#ffa502';
+                            else ctx.fillStyle = '#ff4757';
                         }
                     } else {
                         ctx.fillStyle = '#222';
@@ -516,25 +402,21 @@
             }
         }
 
-        function isFileSystemAccessSupported() {
-            return 'showSaveFilePicker' in window;
-        }
-
         async function setupFileWriter() {
-            if (!isFileSystemAccessSupported()) {
-                playErrorSound();
-                alert('お使いのブラウザは直接ファイル保存に対応していません。\nChrome, Edge等の対応ブラウザをご利用ください。');
+            if (!('showSaveFilePicker' in window)) {
+                alert('お使いのブラウザは対応していません。');
                 return false;
             }
-
             try {
-                const year = recordingStartTime.getFullYear();
-                const month = (recordingStartTime.getMonth() + 1).toString().padStart(2, '0');
-                const day = recordingStartTime.getDate().toString().padStart(2, '0');
-                const hours = recordingStartTime.getHours().toString().padStart(2, '0');
-                const minutes = recordingStartTime.getMinutes().toString().padStart(2, '0');
-                const seconds = recordingStartTime.getSeconds().toString().padStart(2, '0');
-
+                // 指定されたファイル名フォーマット
+                const now = recordingStartTime;
+                const year = now.getFullYear();
+                const month = (now.getMonth() + 1).toString().padStart(2, '0');
+                const day = now.getDate().toString().padStart(2, '0');
+                const hours = now.getHours().toString().padStart(2, '0');
+                const minutes = now.getMinutes().toString().padStart(2, '0');
+                const seconds = now.getSeconds().toString().padStart(2, '0');
+                
                 const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画_.webm`;
 
                 fileHandle = await window.showSaveFilePicker({
@@ -544,153 +426,89 @@
                         accept: { 'video/webm': ['.webm'] }
                     }]
                 });
-
                 writableStream = await fileHandle.createWritable();
                 return true;
-            } catch (err) {
-                console.error('ファイル保存ダイアログでエラー:', err);
-                return false;
-            }
+            } catch (err) { return false; }
         }
 
-        // === メイン処理：録画ボタンのクリックイベント ===
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
                     statusText.textContent = '共有する画面を選択してください...';
-
                     displayStream = await navigator.mediaDevices.getDisplayMedia({
                         video: { frameRate: 30 },
-                        audio: {
-                            channelCount: 2,
-                            echoCancellation: false,
-                            noiseSuppression: false,
-                            autoGainControl: false
-                        }
+                        audio: { channelCount: 2, echoCancellation: false }
                     });
 
                     recordingStartTime = new Date();
-
-                    statusText.textContent = '保存先を選択してください...';
-                    const canStreamToFile = await setupFileWriter();
-
-                    if (!canStreamToFile) {
-                        playErrorSound();
-                        displayStream.getTracks().forEach(track => track.stop());
-                        statusText.textContent = "❌ 保存がキャンセルされました";
-                        setTimeout(() => statusText.textContent = "クリックして録画開始", 3000);
+                    if (!(await setupFileWriter())) {
+                        displayStream.getTracks().forEach(t => t.stop());
+                        statusText.textContent = "クリックして録画開始";
                         return;
                     }
 
-                    // Audio setup start
                     audioContext = new AudioContext();
                     const destination = audioContext.createMediaStreamDestination();
-                    destination.channelCount = 2; // ステレオ
 
-                    let hasSystemAudio = displayStream.getAudioTracks().length > 0;
-
-                    // --- System Audio Path ---
+                    // システム音声パス
                     sysAnalyser = audioContext.createAnalyser();
-                    sysAnalyser.fftSize = 512; // 解像度調整
-                    sysAnalyser.smoothingTimeConstant = 0.6; // なめらかに
-
-                    if (hasSystemAudio) {
-                        const systemSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
-                        // システム音は Analyzer と Destination の両方へ
-                        systemSource.connect(sysAnalyser);
-                        systemSource.connect(destination);
+                    sysAnalyser.fftSize = 512;
+                    sysAnalyser.smoothingTimeConstant = 0.7;
+                    if (displayStream.getAudioTracks().length > 0) {
+                        const sysSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
+                        sysSource.connect(sysAnalyser);
+                        sysSource.connect(destination);
                     }
 
-                    // --- Mic Audio Path with High-Pass Filter ---
+                    // マイク音声パス
                     micAnalyser = audioContext.createAnalyser();
                     micAnalyser.fftSize = 512;
-                    micAnalyser.smoothingTimeConstant = 0.6; // 0.85 -> 0.6 に変更
-
+                    micAnalyser.smoothingTimeConstant = 0.7;
                     try {
                         const micStream = await navigator.mediaDevices.getUserMedia({
-                            audio: {
-                                echoCancellation: true,
-                                noiseSuppression: true
-                            }
+                            audio: { echoCancellation: true, noiseSuppression: true }
                         });
-
                         const micSource = audioContext.createMediaStreamSource(micStream);
-
-                        // ハイパスフィルターの作成 (ノイズ除去: 低音カット)
-                        const highPassFilter = audioContext.createBiquadFilter();
-                        highPassFilter.type = 'highpass';
-                        highPassFilter.frequency.value = 150; // 150Hz以下をカット
-                        highPassFilter.Q.value = 0.7; // クオリティファクタ（急峻さ）
-
-                        // 接続: Mic -> Filter -> Analyzer
-                        micSource.connect(highPassFilter);
-                        highPassFilter.connect(micAnalyser);
-
-                        // 接続: Filter -> Destination (録音用)
-                        highPassFilter.connect(destination);
-
-                        statusText.textContent = hasSystemAudio ? "🎤 システム音声 + マイク" : "🎤 マイクのみ";
-
-                    } catch (micError) {
-                        console.error("マイク音声エラー:", micError);
-                        statusText.innerHTML = hasSystemAudio ? "⚠️ マイクなし(システムのみ)" : "⚠️ 音声なし";
+                        const hpFilter = audioContext.createBiquadFilter();
+                        hpFilter.type = 'highpass';
+                        hpFilter.frequency.value = 150;
+                        micSource.connect(hpFilter);
+                        hpFilter.connect(micAnalyser);
+                        hpFilter.connect(destination);
+                        statusText.textContent = "🎤 システム音声 + マイク";
+                    } catch (e) {
+                        statusText.textContent = "⚠️ システム音声のみ";
                         recordButton.classList.add('warning');
                     }
 
-                    // 録画用ストリームの作成
-                    const combinedStream = new MediaStream([
-                        ...displayStream.getVideoTracks(),
-                        ...destination.stream.getAudioTracks()
-                    ]);
-
-                    mediaRecorder = new MediaRecorder(combinedStream, {
+                    const combined = new MediaStream([...displayStream.getVideoTracks(), ...destination.stream.getAudioTracks()]);
+                    mediaRecorder = new MediaRecorder(combined, {
                         mimeType: 'video/webm;codecs=vp9,opus',
                         videoBitsPerSecond: 2500000
                     });
 
-                    mediaRecorder.ondataavailable = async (event) => {
-                        if (event.data.size > 0 && writableStream) {
-                            try {
-                                await writableStream.write(event.data);
-                            } catch (err) {
-                                console.error('書き込みエラー:', err);
-                            }
-                        }
+                    mediaRecorder.ondataavailable = async (e) => {
+                        if (e.data.size > 0 && writableStream) await writableStream.write(e.data);
                     };
 
                     mediaRecorder.onstop = async () => {
                         if (writableStream) {
-                            try {
-                                await writableStream.close();
-                                statusText.textContent = "✅ 録画完了!保存されました";
-                            } catch (err) {
-                                playErrorSound();
-                                statusText.textContent = "❌ 保存エラーが発生しました";
-                            }
+                            await writableStream.close();
+                            statusText.textContent = "✅ 録画が保存されました";
                         }
-
                         setTimeout(() => statusText.textContent = "クリックして録画開始", 3000);
                     };
 
                     mediaRecorder.start(1000);
-                    startRecording(); // UI更新とアニメーション開始
-
+                    startRecording();
                 } catch (err) {
-                    playErrorSound();
-                    console.error("開始エラー:", err);
                     stopRecording();
                     statusText.textContent = "❌ エラーが発生しました";
-                    setTimeout(() => statusText.textContent = "クリックして録画開始", 3000);
                 }
             } else {
-                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                    mediaRecorder.stop();
-                    stopRecording();
-
-                    if (displayStream) {
-                        displayStream.getTracks().forEach(track => track.stop());
-                    }
-                }
+                if (mediaRecorder) mediaRecorder.stop();
+                stopRecording();
+                if (displayStream) displayStream.getTracks().forEach(t => t.stop());
             }
         });
     </script>
