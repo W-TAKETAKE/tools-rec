@@ -45,7 +45,7 @@
         }
 
         .container.expanded {
-            height: 520px;
+            height: 700px;
         }
 
         /* === 録画ボタンのデザイン === */
@@ -99,13 +99,27 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
         }
 
         @keyframes ripple {
-            0% { transform: scale(0.8); opacity: 1; }
-            100% { transform: scale(1.4); opacity: 0; }
+            0% {
+                transform: scale(0.8);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1.4);
+                opacity: 0;
+            }
         }
 
         .icon {
@@ -145,8 +159,15 @@
         }
 
         @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
         }
 
         .timer {
@@ -161,6 +182,25 @@
 
         .timer.active {
             display: block;
+        }
+
+        /* === プレビュー動画エリア === */
+        #previewVideo {
+            width: 85%;
+            height: 160px;
+            background: #000;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            margin-bottom: 10px;
+            object-fit: contain;
+            display: none;
+            opacity: 0;
+            transition: opacity 0.5s ease 0.1s;
+        }
+
+        #previewVideo.active {
+            display: block;
+            opacity: 1;
         }
 
         /* === ビジュアライザーエリア === */
@@ -218,6 +258,8 @@
 
         <div class="timer" id="timer">00:00</div>
 
+        <video id="previewVideo" autoplay muted playsinline></video>
+
         <div class="visualizer-container hidden" id="visualizerContainer">
             <div class="visualizer-box">
                 <span class="visualizer-label">マイク音声</span>
@@ -245,13 +287,14 @@
         const timerElement = document.getElementById('timer');
         const mainContainer = document.getElementById('mainContainer');
         const visualizerContainer = document.getElementById('visualizerContainer');
+        const previewVideo = document.getElementById('previewVideo');
         const micCanvas = document.getElementById('micVisualizer');
         const sysCanvas = document.getElementById('sysVisualizer');
         const micCtx = micCanvas.getContext('2d');
         const sysCtx = sysCanvas.getContext('2d');
 
         window.onload = function () {
-            window.resizeTo(550, 560);
+            window.resizeTo(550, 750);
         };
 
         function playErrorSound() {
@@ -270,7 +313,7 @@
                     osc.stop(startTime + duration);
                 };
                 createBeep(now + 0.2, 1.0);
-            } catch (e) {}
+            } catch (e) { }
         }
 
         function updateTimer() {
@@ -293,6 +336,7 @@
             statusDot.classList.add('recording');
             timerElement.classList.add('active');
             mainContainer.classList.add('expanded');
+            previewVideo.classList.add('active');
             visualizerContainer.classList.remove('hidden');
             timerInterval = setInterval(updateTimer, 1000);
             drawVisualizers();
@@ -309,6 +353,8 @@
             statusDot.classList.remove('recording');
             timerElement.classList.remove('active');
             mainContainer.classList.remove('expanded');
+            previewVideo.classList.remove('active');
+            previewVideo.srcObject = null;
             visualizerContainer.classList.add('hidden');
             if (timerInterval) clearInterval(timerInterval);
             if (animationId) cancelAnimationFrame(animationId);
@@ -358,7 +404,7 @@
             for (let i = 0; i < barCount; i++) {
                 // skipFirstがtrueならサンプリング地点を1つ分ずらす
                 const logicalIndex = i + (skipFirst ? 1 : 0);
-                
+
                 const targetFreq = Math.pow(10, logMin + logicalIndex * logStep);
                 let targetIndex = Math.floor(targetFreq / binSize);
                 if (targetIndex >= bufferLength) targetIndex = bufferLength - 1;
@@ -416,7 +462,7 @@
                 const hours = now.getHours().toString().padStart(2, '0');
                 const minutes = now.getMinutes().toString().padStart(2, '0');
                 const seconds = now.getSeconds().toString().padStart(2, '0');
-                
+
                 const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画_.webm`;
 
                 fileHandle = await window.showSaveFilePicker({
@@ -439,6 +485,8 @@
                         video: { frameRate: 30 },
                         audio: { channelCount: 2, echoCancellation: false }
                     });
+
+                    previewVideo.srcObject = displayStream;
 
                     recordingStartTime = new Date();
                     if (!(await setupFileWriter())) {
