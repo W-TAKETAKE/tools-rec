@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -99,27 +98,13 @@
         }
 
         @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.7;
-            }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
         }
 
         @keyframes ripple {
-            0% {
-                transform: scale(0.8);
-                opacity: 1;
-            }
-
-            100% {
-                transform: scale(1.4);
-                opacity: 0;
-            }
+            0% { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(1.4); opacity: 0; }
         }
 
         .icon {
@@ -159,15 +144,8 @@
         }
 
         @keyframes blink {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.3;
-            }
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
 
         .timer {
@@ -243,23 +221,17 @@
         }
     </style>
 </head>
-
 <body>
     <div class="container" id="mainContainer">
-
         <button class="record-button" id="recordButton">
             <span class="icon" id="recordIcon">●</span>
         </button>
-
         <div class="status" id="status">
             <span class="status-dot" id="statusDot"></span>
             <span id="statusText">クリックして録画開始</span>
         </div>
-
         <div class="timer" id="timer">00:00</div>
-
         <video id="previewVideo" autoplay muted playsinline></video>
-
         <div class="visualizer-container hidden" id="visualizerContainer">
             <div class="visualizer-box">
                 <span class="visualizer-label">マイク音声</span>
@@ -270,7 +242,6 @@
                 <canvas id="sysVisualizer" width="200" height="150"></canvas>
             </div>
         </div>
-
     </div>
 
     <script>
@@ -326,7 +297,6 @@
         }
 
         function startRecording() {
-            recordingStartTime = new Date();
             isRecording = true;
             document.title = 'R-Running';
             document.body.classList.add('recording-active');
@@ -376,7 +346,7 @@
             drawSegmentedEqualizer(sysAnalyser, sysCtx, sysCanvas.width, sysCanvas.height, 'green_orange', 10, true);
         }
 
-        /* === ビジュアライザー描画コア関数 (改良版) === */
+        /* === ビジュアライザー描画コア関数 === */
         function drawSegmentedEqualizer(analyser, ctx, width, height, colorMode, noiseGate = 0, skipFirst = false) {
             ctx.fillStyle = '#111';
             ctx.fillRect(0, 0, width, height);
@@ -455,7 +425,8 @@
             }
             try {
                 // 指定されたファイル名フォーマット
-                const now = recordingStartTime;
+                const now = new Date();
+                recordingStartTime = now; 
                 const year = now.getFullYear();
                 const month = (now.getMonth() + 1).toString().padStart(2, '0');
                 const day = now.getDate().toString().padStart(2, '0');
@@ -474,12 +445,20 @@
                 });
                 writableStream = await fileHandle.createWritable();
                 return true;
-            } catch (err) { return false; }
+            } catch (err) {
+                return false;
+            }
         }
 
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
+                    // 1. まず保存先を選択させる（ユーザーアクティベーション対策）
+                    if (!(await setupFileWriter())) {
+                        return;
+                    }
+
+                    // 2. 次に画面共有を選択させる
                     statusText.textContent = '共有する画面を選択してください...';
                     displayStream = await navigator.mediaDevices.getDisplayMedia({
                         video: { frameRate: 30 },
@@ -487,13 +466,6 @@
                     });
 
                     previewVideo.srcObject = displayStream;
-
-                    recordingStartTime = new Date();
-                    if (!(await setupFileWriter())) {
-                        displayStream.getTracks().forEach(t => t.stop());
-                        statusText.textContent = "クリックして録画開始";
-                        return;
-                    }
 
                     audioContext = new AudioContext();
                     const destination = audioContext.createMediaStreamDestination();
@@ -536,7 +508,9 @@
                     });
 
                     mediaRecorder.ondataavailable = async (e) => {
-                        if (e.data.size > 0 && writableStream) await writableStream.write(e.data);
+                        if (e.data.size > 0 && writableStream) {
+                            await writableStream.write(e.data);
+                        }
                     };
 
                     mediaRecorder.onstop = async () => {
@@ -550,6 +524,7 @@
                     mediaRecorder.start(1000);
                     startRecording();
                 } catch (err) {
+                    if (writableStream) await writableStream.close();
                     stopRecording();
                     statusText.textContent = "❌ エラーが発生しました";
                 }
@@ -561,5 +536,4 @@
         });
     </script>
 </body>
-
 </html>
