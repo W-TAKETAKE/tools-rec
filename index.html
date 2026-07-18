@@ -1,7 +1,6 @@
 <!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
+<html lang="ja"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>R</title>
     <style>
@@ -254,10 +253,10 @@
             <span class="status-dot" id="statusDot"></span>
             <span id="statusText">クリックして録画開始</span>
         </div>
-        <div class="version">Version 2026.6.22</div>
+        <div class="version">Version 2026.7.21</div>
         <div class="timer" id="timer">00:00</div>
         <div class="file-size" id="fileSize">0.00 KB</div>
-        <video id="previewVideo" autoplay muted playsinline></video>
+        <video id="previewVideo" autoplay="" muted="" playsinline=""></video>
         <div class="visualizer-container hidden" id="visualizerContainer">
             <div class="visualizer-box">
                 <span class="visualizer-label">マイク音声</span>
@@ -346,12 +345,14 @@
 
             const isRec = await getMeta('isRecording');
             if (isRec) {
-                const fileName = await getMeta('fileName') || 'recovered_recording.webm';
+                const savedMimeType = await getMeta('mimeType') || 'video/webm';
+                const fallbackExt = savedMimeType.includes('mp4') ? 'mp4' : 'webm';
+                const fileName = await getMeta('fileName') || `recovered_recording.${fallbackExt}`;
                 const chunks = await getAllChunks();
                 if (chunks.length > 0) {
                     const recover = confirm(`前回の録画（${fileName}）が途中で終了されました。データを復元してダウンロードしますか？`);
                     if (recover) {
-                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        const blob = new Blob(chunks, { type: savedMimeType });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
@@ -526,7 +527,26 @@
             }
         }
 
-        async function setupFileWriter() {
+        // === 録画フォーマットの選定（mp4優先、非対応ならwebmにフォールバック） ===
+        function getSupportedRecordingFormat() {
+            const candidates = [
+                { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', ext: 'mp4', desc: 'MP4 Video' },
+                { mimeType: 'video/mp4;codecs=h264,aac', ext: 'mp4', desc: 'MP4 Video' },
+                { mimeType: 'video/mp4', ext: 'mp4', desc: 'MP4 Video' },
+                { mimeType: 'video/webm;codecs=vp9,opus', ext: 'webm', desc: 'WebM Video' },
+                { mimeType: 'video/webm;codecs=vp8,opus', ext: 'webm', desc: 'WebM Video' },
+                { mimeType: 'video/webm', ext: 'webm', desc: 'WebM Video' }
+            ];
+            for (const candidate of candidates) {
+                if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidate.mimeType)) {
+                    return candidate;
+                }
+            }
+            // 最終フォールバック（isTypeSupportedが使えない古い環境向け）
+            return { mimeType: 'video/webm', ext: 'webm', desc: 'WebM Video' };
+        }
+
+        async function setupFileWriter(format) {
             if (!('showSaveFilePicker' in window)) {
                 alert('お使いのブラウザは対応していません。');
                 return false;
@@ -542,16 +562,17 @@
                 const minutes = now.getMinutes().toString().padStart(2, '0');
                 const seconds = now.getSeconds().toString().padStart(2, '0');
 
-                const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画_.webm`;
+                const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画_.${format.ext}`;
 
                 fileHandle = await window.showSaveFilePicker({
                     suggestedName: fileName,
                     types: [{
-                        description: 'WebM Video',
-                        accept: { 'video/webm': ['.webm'] }
+                        description: format.desc,
+                        accept: { [`video/${format.ext}`]: [`.${format.ext}`] }
                     }]
                 });
                 await setMeta('fileName', fileHandle.name);
+                await setMeta('mimeType', format.mimeType);
                 writableStream = await fileHandle.createWritable();
                 return true;
             } catch (err) {
@@ -562,8 +583,11 @@
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
+                    // 0. 録画フォーマットを決定（mp4が使えればmp4を優先、無理ならwebm）
+                    const recordingFormat = getSupportedRecordingFormat();
+
                     // 1. まず保存先を選択させる（ユーザーアクティベーション対策）
-                    if (!(await setupFileWriter())) {
+                    if (!(await setupFileWriter(recordingFormat))) {
                         return;
                     }
 
@@ -572,6 +596,7 @@
                     if (fileHandle) {
                         await setMeta('fileName', fileHandle.name);
                     }
+                    await setMeta('mimeType', recordingFormat.mimeType);
 
                     // 2. 次に画面共有を選択させる
                     statusText.textContent = '共有する画面を選択してください...';
@@ -618,7 +643,7 @@
 
                     const combined = new MediaStream([...displayStream.getVideoTracks(), ...destination.stream.getAudioTracks()]);
                     mediaRecorder = new MediaRecorder(combined, {
-                        mimeType: 'video/webm;codecs=vp9,opus',
+                        mimeType: recordingFormat.mimeType,
                         videoBitsPerSecond: 2500000
                     });
 
@@ -657,5 +682,5 @@
             }
         });
     </script>
-</body>
-</html>
+
+</body></html>
