@@ -842,12 +842,21 @@
                     };
 
                     mediaRecorder.onstop = async () => {
-                        if (writableStream) {
-                            await writableStream.close();
-                            statusText.textContent = "✅ 録画が保存されました";
+                        try {
+                            if (writableStream) {
+                                statusText.textContent = "ファイルを保存中...";
+                                await writableStream.close();
+                                statusText.textContent = "✅ 録画が保存されました";
+                            }
+                            clearDB().catch(err => console.error(err));
+                        } catch (err) {
+                            console.error(err);
+                            statusText.textContent = "❌ 保存中にエラーが発生しました";
+                        } finally {
+                            setTimeout(() => {
+                                if (!isRecording) statusText.textContent = "クリックして録画開始";
+                            }, 3000);
                         }
-                        await clearDB();
-                        setTimeout(() => statusText.textContent = "クリックして録画開始", 3000);
                     };
 
                     mediaRecorder.start(1000);
@@ -865,5 +874,4 @@
             }
         });
     </script>
-
 </body></html>
