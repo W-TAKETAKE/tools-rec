@@ -1,36 +1,36 @@
 <!DOCTYPE html>
 <html lang="ja"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>R</title>
     <style>
-        /* === 基本レイアウトと背景設定 === */
         html,
         body {
             margin: 0;
             padding: 0;
-            height: 100%;
+            width: 100%;
+            height: 100vh;
             overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #485563 0%, #29323c 100%);
             transition: background 0.8s ease;
+            box-sizing: border-box;
         }
 
         body.recording-active {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
 
-        /* === アプリのメインコンテナ === */
         .container {
-            width: 500px;
-            height: 300px;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            width: 90vw;
+            max-width: 500px;
+            min-height: 300px;
+            max-height: 95vh;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            justify-content: flex-start;
             align-items: center;
             text-align: center;
             background: rgba(255, 255, 255, 0.95);
@@ -38,18 +38,45 @@
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
             backdrop-filter: blur(10px);
             padding: 20px;
-            transition: height 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-            overflow: hidden;
+            box-sizing: border-box;
+            transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+            overflow-y: auto;
         }
 
         .container.expanded {
-            height: 700px;
+            max-height: 95vh;
         }
 
-        /* === 録画ボタンのデザイン === */
+        .container::before,
+        .container::after {
+            content: '';
+            margin: auto;
+        }
+
+        .container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .container::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+
+        .container::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+
+        .container::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
         .record-button {
-            width: 100px;
-            height: 100px;
+            width: 80px;
+            height: 80px;
+            min-width: 80px;
+            min-height: 80px;
             border-radius: 20px;
             border: 5px solid #95a5a6;
             background: linear-gradient(135deg, #bdc3c7, #95a5a6);
@@ -58,10 +85,11 @@
             align-items: center;
             justify-content: center;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             position: relative;
             box-shadow: 0 8px 25px rgba(149, 165, 166, 0.4);
             z-index: 10;
+            flex-shrink: 0;
         }
 
         .record-button:hover {
@@ -89,8 +117,8 @@
         .record-button.recording::after {
             content: '';
             position: absolute;
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
             border: 3px solid rgba(255, 71, 87, 0.3);
             border-radius: 50%;
             animation: ripple 2s ease-out infinite;
@@ -107,30 +135,30 @@
         }
 
         .icon {
-            font-size: 40px;
+            font-size: 36px;
             color: white;
             transition: all 0.3s ease;
         }
 
         .record-button.recording .icon {
-            font-size: 30px;
+            font-size: 26px;
         }
 
         .status {
             color: #495057;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
-            min-height: 24px;
+            min-height: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            gap: 8px;
+            margin-bottom: 5px;
         }
 
         .status-dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: #28a745;
             display: none;
@@ -148,9 +176,9 @@
         }
 
         .version {
-            font-size: 12px;
+            font-size: 11px;
             color: #868e96;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
         }
 
         .container.expanded .version {
@@ -159,12 +187,12 @@
 
         .timer {
             font-family: 'Courier New', monospace;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: bold;
             color: #dc3545;
-            margin-top: 5px;
+            margin-top: 2px;
             display: none;
-            margin-bottom: 5px;
+            margin-bottom: 2px;
         }
 
         .timer.active {
@@ -173,48 +201,91 @@
 
         .file-size {
             font-family: 'Courier New', monospace;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             color: #6c757d;
-            margin-top: 5px;
+            margin-top: 2px;
             display: none;
-            margin-bottom: 15px;
+            margin-bottom: 8px;
         }
 
         .file-size.active {
             display: block;
         }
 
-        /* === プレビュー動画エリア === */
+        .preview-wrapper {
+            position: relative;
+            width: 100%;
+            max-height: 30vh;
+            margin-bottom: 10px;
+            display: none;
+            cursor: pointer;
+            border-radius: 8px;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .preview-wrapper.active {
+            display: block;
+        }
+
         #previewVideo {
-            width: 85%;
-            height: 160px;
+            width: 100%;
+            height: 100%;
+            max-height: 30vh;
             background: #000;
             border-radius: 8px;
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-            margin-bottom: 10px;
             object-fit: contain;
-            display: none;
+            display: block;
             opacity: 0;
-            transition: opacity 0.5s ease 0.1s;
+            transition: opacity 0.5s ease 0.1s, filter 0.3s ease;
         }
 
         #previewVideo.active {
-            display: block;
             opacity: 1;
         }
 
-        /* === ビジュアライザーエリア === */
+        .preview-wrapper.paused #previewVideo {
+            filter: grayscale(100%) brightness(0.5);
+        }
+
+        .pause-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 12px;
+            white-space: nowrap;
+            max-width: 90%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            pointer-events: none;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            letter-spacing: 0.5px;
+        }
+
+        .preview-wrapper.paused .pause-overlay {
+            display: block;
+        }
+
         .visualizer-container {
             display: flex;
             justify-content: space-between;
             width: 100%;
-            margin-top: 10px;
-            padding: 0 20px;
+            margin-top: 5px;
+            padding: 0;
             box-sizing: border-box;
-            gap: 20px;
+            gap: 10px;
             opacity: 1;
             transition: opacity 0.5s ease 0.1s;
+            flex-shrink: 1;
         }
 
         .visualizer-container.hidden {
@@ -227,16 +298,33 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            cursor: pointer;
+            user-select: none;
+            padding: 6px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        .visualizer-box:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        .visualizer-box.muted {
+            background: rgba(0, 0, 0, 0.06);
         }
 
         .visualizer-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #6c757d;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
             font-weight: bold;
         }
 
         canvas {
+            width: 100%;
+            height: auto;
+            max-height: 120px;
             background: #111;
             border-radius: 4px;
             box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
@@ -256,25 +344,33 @@
         <div class="version">Version 2026.7.21</div>
         <div class="timer" id="timer">00:00</div>
         <div class="file-size" id="fileSize">0.00 KB</div>
-        <video id="previewVideo" autoplay="" muted="" playsinline=""></video>
+        <div class="preview-wrapper" id="previewWrapper">
+            <video id="previewVideo" autoplay="" muted="" playsinline=""></video>
+            <div class="pause-overlay" id="pauseOverlay">⏸ 録画一時停止中 (クリックで再開)</div>
+        </div>
         <div class="visualizer-container hidden" id="visualizerContainer">
-            <div class="visualizer-box">
-                <span class="visualizer-label">マイク音声</span>
+            <div class="visualizer-box" id="micBox">
+                <span class="visualizer-label" id="micLabel">マイク音声 🎤</span>
                 <canvas id="micVisualizer" width="200" height="150"></canvas>
             </div>
-            <div class="visualizer-box">
-                <span class="visualizer-label">システム音声</span>
+            <div class="visualizer-box" id="sysBox">
+                <span class="visualizer-label" id="sysLabel">システム音声 🔊</span>
                 <canvas id="sysVisualizer" width="200" height="150"></canvas>
             </div>
         </div>
     </div>
 
     <script>
-        // === グローバル変数の定義 ===
         let mediaRecorder, displayStream, recordingStartTime, timerInterval;
         let isRecording = false;
+        let isPaused = false;
+        let pauseStartTime = 0;
+        let totalPausedTime = 0;
         let fileHandle, writableStream;
         let audioContext, micAnalyser, sysAnalyser, animationId;
+        let micGainNode, sysGainNode;
+        let isMicMuted = false;
+        let isSysMuted = false;
         let totalRecordedBytes = 0;
 
         const recordButton = document.getElementById('recordButton');
@@ -285,9 +381,14 @@
         const fileSizeElement = document.getElementById('fileSize');
         const mainContainer = document.getElementById('mainContainer');
         const visualizerContainer = document.getElementById('visualizerContainer');
+        const previewWrapper = document.getElementById('previewWrapper');
         const previewVideo = document.getElementById('previewVideo');
         const micCanvas = document.getElementById('micVisualizer');
         const sysCanvas = document.getElementById('sysVisualizer');
+        const micBox = document.getElementById('micBox');
+        const sysBox = document.getElementById('sysBox');
+        const micLabel = document.getElementById('micLabel');
+        const sysLabel = document.getElementById('sysLabel');
         const micCtx = micCanvas.getContext('2d');
         const sysCtx = sysCanvas.getContext('2d');
 
@@ -341,8 +442,6 @@
         }
 
         window.onload = async function () {
-            window.resizeTo(550, 750);
-
             const isRec = await getMeta('isRecording');
             if (isRec) {
                 const savedMimeType = await getMeta('mimeType') || 'video/webm';
@@ -387,7 +486,7 @@
         function updateTimer() {
             if (!recordingStartTime) return;
             const now = new Date();
-            const elapsed = Math.floor((now - recordingStartTime) / 1000);
+            const elapsed = Math.floor((now - recordingStartTime - totalPausedTime) / 1000);
             const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
             const seconds = (elapsed % 60).toString().padStart(2, '0');
             timerElement.textContent = `${minutes}:${seconds}`;
@@ -401,8 +500,69 @@
             }
         }
 
+        function updateMuteUI() {
+            if (isMicMuted) {
+                micLabel.textContent = "マイク音声 🔇 (MUTE)";
+                micBox.classList.add('muted');
+            } else {
+                micLabel.textContent = "マイク音声 🎤";
+                micBox.classList.remove('muted');
+            }
+
+            if (isSysMuted) {
+                sysLabel.textContent = "システム音声 🔇 (MUTE)";
+                sysBox.classList.add('muted');
+            } else {
+                sysLabel.textContent = "システム音声 🔊";
+                sysBox.classList.remove('muted');
+            }
+        }
+
+        previewWrapper.addEventListener('click', () => {
+            if (!isRecording || !mediaRecorder) return;
+            if (mediaRecorder.state === 'recording') {
+                mediaRecorder.pause();
+                isPaused = true;
+                pauseStartTime = Date.now();
+                if (timerInterval) clearInterval(timerInterval);
+                previewWrapper.classList.add('paused');
+                statusText.textContent = '⏸ 録画一時停止中';
+            } else if (mediaRecorder.state === 'paused') {
+                mediaRecorder.resume();
+                isPaused = false;
+                totalPausedTime += (Date.now() - pauseStartTime);
+                timerInterval = setInterval(updateTimer, 1000);
+                previewWrapper.classList.remove('paused');
+                statusText.textContent = '録画中...';
+            }
+        });
+
+        micBox.addEventListener('click', () => {
+            if (!isRecording) return;
+            isMicMuted = !isMicMuted;
+            if (micGainNode && audioContext) {
+                micGainNode.gain.setValueAtTime(isMicMuted ? 0 : 1, audioContext.currentTime);
+            }
+            updateMuteUI();
+        });
+
+        sysBox.addEventListener('click', () => {
+            if (!isRecording) return;
+            isSysMuted = !isSysMuted;
+            if (sysGainNode && audioContext) {
+                sysGainNode.gain.setValueAtTime(isSysMuted ? 0 : 1, audioContext.currentTime);
+            }
+            updateMuteUI();
+        });
+
         function startRecording() {
             isRecording = true;
+            isPaused = false;
+            totalPausedTime = 0;
+            previewWrapper.classList.remove('paused');
+            isMicMuted = false;
+            isSysMuted = false;
+            updateMuteUI();
             totalRecordedBytes = 0;
             updateFileSizeDisplay();
             document.title = 'R-Running';
@@ -414,6 +574,7 @@
             timerElement.classList.add('active');
             fileSizeElement.classList.add('active');
             mainContainer.classList.add('expanded');
+            previewWrapper.classList.add('active');
             previewVideo.classList.add('active');
             visualizerContainer.classList.remove('hidden');
             timerInterval = setInterval(updateTimer, 1000);
@@ -422,6 +583,12 @@
 
         function stopRecording() {
             isRecording = false;
+            isPaused = false;
+            totalPausedTime = 0;
+            previewWrapper.classList.remove('paused');
+            isMicMuted = false;
+            isSysMuted = false;
+            updateMuteUI();
             document.title = 'R';
             document.body.classList.remove('recording-active');
             recordButton.classList.remove('recording');
@@ -432,6 +599,7 @@
             timerElement.classList.remove('active');
             fileSizeElement.classList.remove('active');
             mainContainer.classList.remove('expanded');
+            previewWrapper.classList.remove('active');
             previewVideo.classList.remove('active');
             previewVideo.srcObject = null;
             visualizerContainer.classList.add('hidden');
@@ -449,15 +617,12 @@
 
         function drawVisualizers() {
             animationId = requestAnimationFrame(drawVisualizers);
-            // マイク：本数をシステム音と合わせ（11本）、通常通り描画
-            drawSegmentedEqualizer(micAnalyser, micCtx, micCanvas.width, micCanvas.height, 'red', 80, false);
-            // システム音：左端を1本スキップして11本描画
-            drawSegmentedEqualizer(sysAnalyser, sysCtx, sysCanvas.width, sysCanvas.height, 'green_orange', 10, true);
+            drawSegmentedEqualizer(micAnalyser, micCtx, micCanvas.width, micCanvas.height, 'red', 80, false, isMicMuted, isPaused);
+            drawSegmentedEqualizer(sysAnalyser, sysCtx, sysCanvas.width, sysCanvas.height, 'green_orange', 10, true, isSysMuted, isPaused);
         }
 
-        /* === ビジュアライザー描画コア関数 === */
-        function drawSegmentedEqualizer(analyser, ctx, width, height, colorMode, noiseGate = 0, skipFirst = false) {
-            ctx.fillStyle = '#111';
+        function drawSegmentedEqualizer(analyser, ctx, width, height, colorMode, noiseGate = 0, skipFirst = false, isMuted = false, isPaused = false) {
+            ctx.fillStyle = (isMuted || isPaused) ? '#1a1a1a' : '#111';
             ctx.fillRect(0, 0, width, height);
             if (!analyser) return;
 
@@ -465,14 +630,14 @@
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
 
-            const barCount = 11; // 全体の表示本数を統一
+            const barCount = 11;
             const barWidth = (width / barCount) - 2;
             const segmentHeight = 4;
             const segmentGap = 1;
             const maxSegments = Math.floor(height / (segmentHeight + segmentGap));
 
             const sampleRate = audioContext ? audioContext.sampleRate : 48000;
-            const minFreq = 120; // 重複を避けるため低域の開始を少し上げる
+            const minFreq = 120;
             const maxFreq = 14000;
 
             const logMin = Math.log10(minFreq);
@@ -481,7 +646,6 @@
             const binSize = (sampleRate / 2) / bufferLength;
 
             for (let i = 0; i < barCount; i++) {
-                // skipFirstがtrueならサンプリング地点を1つ分ずらす
                 const logicalIndex = i + (skipFirst ? 1 : 0);
 
                 const targetFreq = Math.pow(10, logMin + logicalIndex * logStep);
@@ -500,7 +664,6 @@
 
                 if (maxVal < noiseGate) maxVal = 0;
 
-                // 反応を鈍くする (左から5本は感度を0.4倍にする)
                 const sensitivity = (i < 5) ? 0.4 : 1.0;
                 const activeSegments = Math.floor((maxVal / 255) * sensitivity * maxSegments);
 
@@ -509,25 +672,46 @@
                 for (let j = 0; j < maxSegments; j++) {
                     const y = height - ((j + 1) * (segmentHeight + segmentGap));
                     if (j < activeSegments) {
-                        const hue = j / maxSegments;
-                        if (colorMode === 'green_orange') {
-                            if (hue > 0.8) ctx.fillStyle = '#ff4757';
-                            else if (hue > 0.5) ctx.fillStyle = '#ffa502';
-                            else ctx.fillStyle = '#2ed573';
+                        if (isMuted || isPaused) {
+                            ctx.fillStyle = '#777777';
                         } else {
-                            if (hue > 0.8) ctx.fillStyle = '#fffa65';
-                            else if (hue > 0.5) ctx.fillStyle = '#ffa502';
-                            else ctx.fillStyle = '#ff4757';
+                            const hue = j / maxSegments;
+                            if (colorMode === 'green_orange') {
+                                if (hue > 0.8) ctx.fillStyle = '#ff4757';
+                                else if (hue > 0.5) ctx.fillStyle = '#ffa502';
+                                else ctx.fillStyle = '#2ed573';
+                            } else {
+                                if (hue > 0.8) ctx.fillStyle = '#fffa65';
+                                else if (hue > 0.5) ctx.fillStyle = '#ffa502';
+                                else ctx.fillStyle = '#ff4757';
+                            }
                         }
                     } else {
-                        ctx.fillStyle = '#222';
+                        ctx.fillStyle = (isMuted || isPaused) ? '#2d2d2d' : '#222';
                     }
                     ctx.fillRect(x, y, barWidth, segmentHeight);
                 }
             }
+
+            if (isMuted) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                ctx.fillRect(0, height / 2 - 14, width, 28);
+                ctx.fillStyle = '#cccccc';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🔇 MUTE (録音OFF)', width / 2, height / 2);
+            } else if (isPaused) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                ctx.fillRect(0, height / 2 - 14, width, 28);
+                ctx.fillStyle = '#cccccc';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⏸ PAUSE (一時停止)', width / 2, height / 2);
+            }
         }
 
-        // === 録画フォーマットの選定（mp4優先、非対応ならwebmにフォールバック） ===
         function getSupportedRecordingFormat() {
             const candidates = [
                 { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', ext: 'mp4', desc: 'MP4 Video' },
@@ -542,7 +726,6 @@
                     return candidate;
                 }
             }
-            // 最終フォールバック（isTypeSupportedが使えない古い環境向け）
             return { mimeType: 'video/webm', ext: 'webm', desc: 'WebM Video' };
         }
 
@@ -552,9 +735,8 @@
                 return false;
             }
             try {
-                // 指定されたファイル名フォーマット
                 const now = new Date();
-                recordingStartTime = now; 
+                recordingStartTime = now;
                 const year = now.getFullYear();
                 const month = (now.getMonth() + 1).toString().padStart(2, '0');
                 const day = now.getDate().toString().padStart(2, '0');
@@ -583,10 +765,8 @@
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
-                    // 0. 録画フォーマットを決定（mp4が使えればmp4を優先、無理ならwebm）
                     const recordingFormat = getSupportedRecordingFormat();
 
-                    // 1. まず保存先を選択させる（ユーザーアクティベーション対策）
                     if (!(await setupFileWriter(recordingFormat))) {
                         return;
                     }
@@ -598,7 +778,6 @@
                     }
                     await setMeta('mimeType', recordingFormat.mimeType);
 
-                    // 2. 次に画面共有を選択させる
                     statusText.textContent = '共有する画面を選択してください...';
                     displayStream = await navigator.mediaDevices.getDisplayMedia({
                         video: { frameRate: 30 },
@@ -610,20 +789,23 @@
                     audioContext = new AudioContext();
                     const destination = audioContext.createMediaStreamDestination();
 
-                    // システム音声パス
                     sysAnalyser = audioContext.createAnalyser();
                     sysAnalyser.fftSize = 512;
                     sysAnalyser.smoothingTimeConstant = 0.7;
+                    sysGainNode = audioContext.createGain();
+
                     if (displayStream.getAudioTracks().length > 0) {
                         const sysSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
                         sysSource.connect(sysAnalyser);
-                        sysSource.connect(destination);
+                        sysAnalyser.connect(sysGainNode);
+                        sysGainNode.connect(destination);
                     }
 
-                    // マイク音声パス
                     micAnalyser = audioContext.createAnalyser();
                     micAnalyser.fftSize = 512;
                     micAnalyser.smoothingTimeConstant = 0.7;
+                    micGainNode = audioContext.createGain();
+
                     try {
                         const micStream = await navigator.mediaDevices.getUserMedia({
                             audio: { echoCancellation: true, noiseSuppression: true }
@@ -634,7 +816,8 @@
                         hpFilter.frequency.value = 150;
                         micSource.connect(hpFilter);
                         hpFilter.connect(micAnalyser);
-                        hpFilter.connect(destination);
+                        micAnalyser.connect(micGainNode);
+                        micGainNode.connect(destination);
                         statusText.textContent = "🎤 システム音声 + マイク";
                     } catch (e) {
                         statusText.textContent = "⚠️ システム音声のみ";
