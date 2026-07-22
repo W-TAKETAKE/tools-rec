@@ -411,6 +411,7 @@
         let isMicMuted = false;
         let isSysMuted = false;
         let totalRecordedBytes = 0;
+        let recordedChunks = [];
 
         const recordButton = document.getElementById('recordButton');
         const recordIcon = document.getElementById('recordIcon');
@@ -820,6 +821,7 @@
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
+                    recordedChunks = [];
                     const preferredFormat = formatSelect.value;
                     const recordingFormat = getSupportedRecordingFormat(preferredFormat);
 
@@ -890,10 +892,8 @@
                         if (e.data.size > 0) {
                             totalRecordedBytes += e.data.size;
                             updateFileSizeDisplay();
+                            recordedChunks.push(e.data);
                             await saveChunk(e.data);
-                            if (writableStream) {
-                                await writableStream.write(e.data);
-                            }
                         }
                     };
 
@@ -901,6 +901,8 @@
                         try {
                             if (writableStream) {
                                 statusText.textContent = "ファイルを保存中...";
+                                const finalBlob = new Blob(recordedChunks, { type: recordingFormat.mimeType });
+                                await writableStream.write(finalBlob);
                                 await writableStream.close();
                                 statusText.textContent = "✅ 録画が保存されました";
                             }
