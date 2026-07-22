@@ -109,9 +109,10 @@
             animation: pulse 1.5s ease-in-out infinite;
         }
 
-        .record-button.recording.warning {
+        .record-button.warning {
             background: linear-gradient(135deg, #ffd93d, #f9ca24);
             border-color: #f39c12;
+            box-shadow: 0 8px 25px rgba(243, 156, 18, 0.4);
         }
 
         .record-button.recording::after {
@@ -412,6 +413,9 @@
         let isSysMuted = false;
         let totalRecordedBytes = 0;
         let recordedChunks = [];
+        let partIndex = 1;
+        let userInitiatedStop = false;
+        let isRecoveryPending = false;
 
         const recordButton = document.getElementById('recordButton');
         const recordIcon = document.getElementById('recordIcon');
@@ -611,11 +615,10 @@
             isMicMuted = false;
             isSysMuted = false;
             updateMuteUI();
-            totalRecordedBytes = 0;
-            updateFileSizeDisplay();
             formatSelect.disabled = true;
             document.title = 'R-Running';
             document.body.classList.add('recording-active');
+            recordButton.classList.remove('warning');
             recordButton.classList.add('recording');
             recordIcon.textContent = '■';
             statusText.textContent = '録画中...';
@@ -630,7 +633,7 @@
             drawVisualizers();
         }
 
-        function stopRecording() {
+        function stopRecording(isDisconnect = false) {
             isRecording = false;
             isPaused = false;
             totalPausedTime = 0;
@@ -642,9 +645,19 @@
             document.title = 'R';
             document.body.classList.remove('recording-active');
             recordButton.classList.remove('recording');
-            recordButton.classList.remove('warning');
-            recordIcon.textContent = '●';
-            statusText.textContent = '処理中...';
+            
+            if (!isDisconnect) {
+                recordButton.classList.remove('warning');
+                recordIcon.textContent = '●';
+                statusText.textContent = '処理中...';
+                isRecoveryPending = false;
+                partIndex = 1;
+            } else {
+                recordButton.classList.add('warning');
+                recordIcon.textContent = '▶';
+                statusText.textContent = `⚠️ 切断されました！クリックしてPart ${partIndex} を録画再開`;
+            }
+
             statusDot.classList.remove('recording');
             timerElement.classList.remove('active');
             fileSizeElement.classList.remove('active');
@@ -658,6 +671,20 @@
             clearCanvas(micCtx, micCanvas);
             clearCanvas(sysCtx, sysCanvas);
             if (audioContext && audioContext.state !== 'closed') audioContext.close();
+        }
+
+        function handleUnexpectedDisconnect() {
+            if (!isRecording) return;
+            playErrorSound();
+            partIndex++;
+            isRecoveryPending = true;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            stopRecording(true);
+            if (displayStream) {
+                displayStream.getTracks().forEach(t => t.stop());
+            }
         }
 
         function clearCanvas(ctx, canvas) {
@@ -785,7 +812,7 @@
             return { mimeType: 'video/webm', ext: 'webm', desc: 'WebM Video' };
         }
 
-        async function setupFileWriter(format) {
+        async function setupFileWriter(format, currentPart = 1) {
             if (!('showSaveFilePicker' in window)) {
                 alert('お使いのブラウザは対応していません。');
                 return false;
@@ -800,7 +827,8 @@
                 const minutes = now.getMinutes().toString().padStart(2, '0');
                 const seconds = now.getSeconds().toString().padStart(2, '0');
 
-                const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画_.${format.ext}`;
+                const partSuffix = currentPart > 1 ? `_Part${currentPart}` : '';
+                const fileName = `${year}${month}${day}_${hours}${minutes}${seconds}_録画${partSuffix}.${format.ext}`;
 
                 fileHandle = await window.showSaveFilePicker({
                     suggestedName: fileName,
@@ -821,11 +849,20 @@
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
+                    userInitiatedStop = false;
                     recordedChunks = [];
+                    totalRecordedBytes = 0;
+                    updateFileSizeDisplay();
+
                     const preferredFormat = formatSelect.value;
                     const recordingFormat = getSupportedRecordingFormat(preferredFormat);
 
-                    if (!(await setupFileWriter(recordingFormat))) {
+                    if (!(await setupFileWriter(recordingFormat, partIndex))) {
+                        isRecoveryPending = false;
+                        partIndex = 1;
+                        recordButton.classList.remove('warning');
+                        recordIcon.textContent = '●';
+                        statusText.textContent = "クリックして録画開始";
                         return;
                     }
 
@@ -841,6 +878,15 @@
                         video: { frameRate: 30 },
                         audio: { channelCount: 2, echoCancellation: false }
                     });
+
+                    const videoTrack = displayStream.getVideoTracks()[0];
+                    if (videoTrack) {
+                        videoTrack.onended = () => {
+                            if (!userInitiatedStop && isRecording) {
+                                handleUnexpectedDisconnect();
+                            }
+                        };
+                    }
 
                     previewVideo.srcObject = displayStream;
 
@@ -904,20 +950,27 @@
                                 const finalBlob = new Blob(recordedChunks, { type: recordingFormat.mimeType });
                                 await writableStream.write(finalBlob);
                                 await writableStream.close();
-                                statusText.textContent = "✅ 録画が保存されました";
+                                if (isRecoveryPending) {
+                                    statusText.textContent = `⚠️ 切断されました！クリックしてPart ${partIndex} を録画再開`;
+                                } else {
+                                    statusText.textContent = "✅ 録画が保存されました";
+                                }
                             }
                             clearDB().catch(err => console.error(err));
                         } catch (err) {
                             console.error(err);
                             statusText.textContent = "❌ 保存中にエラーが発生しました";
                         } finally {
-                            setTimeout(() => {
-                                if (!isRecording) statusText.textContent = "クリックして録画開始";
-                            }, 3000);
+                            if (!isRecoveryPending) {
+                                setTimeout(() => {
+                                    if (!isRecording && !isRecoveryPending) statusText.textContent = "クリックして録画開始";
+                                }, 3000);
+                            }
                         }
                     };
 
                     mediaRecorder.start(1000);
+                    isRecoveryPending = false;
                     startRecording();
                 } catch (err) {
                     if (writableStream) await writableStream.close();
@@ -926,6 +979,9 @@
                     statusText.textContent = "❌ エラーが発生しました";
                 }
             } else {
+                userInitiatedStop = true;
+                isRecoveryPending = false;
+                partIndex = 1;
                 if (mediaRecorder) mediaRecorder.stop();
                 stopRecording();
                 if (displayStream) displayStream.getTracks().forEach(t => t.stop());
