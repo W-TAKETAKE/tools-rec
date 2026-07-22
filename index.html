@@ -178,7 +178,39 @@
         .version {
             font-size: 11px;
             color: #868e96;
-            margin-bottom: 5px;
+            margin-bottom: 20px;
+        }
+
+        .format-select-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #495057;
+            font-weight: 500;
+        }
+
+        .format-select-wrapper select {
+            padding: 4px 10px;
+            border-radius: 8px;
+            border: 1px solid #ced4da;
+            background-color: #ffffff;
+            font-size: 12px;
+            font-weight: bold;
+            color: #333;
+            cursor: pointer;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .format-select-wrapper select:hover {
+            border-color: #95a5a6;
+        }
+
+        .format-select-wrapper select:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .container.expanded .version {
@@ -341,7 +373,14 @@
             <span class="status-dot" id="statusDot"></span>
             <span id="statusText">クリックして録画開始</span>
         </div>
-        <div class="version">Version 2026.7.21</div>
+        <div class="version">Version 2026.7.22</div>
+        <div class="format-select-wrapper">
+            <label for="formatSelect">保存形式:</label>
+            <select id="formatSelect">
+                <option value="mp4">MP4</option>
+                <option value="webm">WebM</option>
+            </select>
+        </div>
         <div class="timer" id="timer">00:00</div>
         <div class="file-size" id="fileSize">0.00 KB</div>
         <div class="preview-wrapper" id="previewWrapper">
@@ -389,6 +428,7 @@
         const sysBox = document.getElementById('sysBox');
         const micLabel = document.getElementById('micLabel');
         const sysLabel = document.getElementById('sysLabel');
+        const formatSelect = document.getElementById('formatSelect');
         const micCtx = micCanvas.getContext('2d');
         const sysCtx = sysCanvas.getContext('2d');
 
@@ -441,7 +481,14 @@
             tx.objectStore('meta').clear();
         }
 
+        formatSelect.addEventListener('change', () => {
+            localStorage.setItem('preferredFormat', formatSelect.value);
+        });
+
         window.onload = async function () {
+            const savedFormat = localStorage.getItem('preferredFormat') || 'mp4';
+            formatSelect.value = savedFormat;
+
             const isRec = await getMeta('isRecording');
             if (isRec) {
                 const savedMimeType = await getMeta('mimeType') || 'video/webm';
@@ -565,6 +612,7 @@
             updateMuteUI();
             totalRecordedBytes = 0;
             updateFileSizeDisplay();
+            formatSelect.disabled = true;
             document.title = 'R-Running';
             document.body.classList.add('recording-active');
             recordButton.classList.add('recording');
@@ -589,6 +637,7 @@
             isMicMuted = false;
             isSysMuted = false;
             updateMuteUI();
+            formatSelect.disabled = false;
             document.title = 'R';
             document.body.classList.remove('recording-active');
             recordButton.classList.remove('recording');
@@ -712,16 +761,22 @@
             }
         }
 
-        function getSupportedRecordingFormat() {
-            const candidates = [
+        function getSupportedRecordingFormat(preferredFormat = 'mp4') {
+            const mp4Candidates = [
                 { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', ext: 'mp4', desc: 'MP4 Video' },
                 { mimeType: 'video/mp4;codecs=h264,aac', ext: 'mp4', desc: 'MP4 Video' },
-                { mimeType: 'video/mp4', ext: 'mp4', desc: 'MP4 Video' },
+                { mimeType: 'video/mp4', ext: 'mp4', desc: 'MP4 Video' }
+            ];
+            const webmCandidates = [
                 { mimeType: 'video/webm;codecs=vp9,opus', ext: 'webm', desc: 'WebM Video' },
                 { mimeType: 'video/webm;codecs=vp8,opus', ext: 'webm', desc: 'WebM Video' },
                 { mimeType: 'video/webm', ext: 'webm', desc: 'WebM Video' }
             ];
-            for (const candidate of candidates) {
+
+            const primaryCandidates = preferredFormat === 'webm' ? webmCandidates : mp4Candidates;
+            const fallbackCandidates = preferredFormat === 'webm' ? mp4Candidates : webmCandidates;
+
+            for (const candidate of [...primaryCandidates, ...fallbackCandidates]) {
                 if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidate.mimeType)) {
                     return candidate;
                 }
@@ -765,7 +820,8 @@
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
-                    const recordingFormat = getSupportedRecordingFormat();
+                    const preferredFormat = formatSelect.value;
+                    const recordingFormat = getSupportedRecordingFormat(preferredFormat);
 
                     if (!(await setupFileWriter(recordingFormat))) {
                         return;
