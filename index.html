@@ -388,11 +388,11 @@
             <div class="pause-overlay" id="pauseOverlay">⏸ 録画一時停止中 (クリックで再開)</div>
         </div>
         <div class="visualizer-container hidden" id="visualizerContainer">
-            <div class="visualizer-box" id="micBox">
+			<div class="visualizer-box" id="micBox" role="button" tabindex="0" aria-label="マイク音声 🎤">
                 <span class="visualizer-label" id="micLabel">マイク音声 🎤</span>
                 <canvas id="micVisualizer" width="200" height="150"></canvas>
             </div>
-            <div class="visualizer-box" id="sysBox">
+            <div class="visualizer-box" id="sysBox" role="button" tabindex="0" aria-label="システム音声 🔊">
                 <span class="visualizer-label" id="sysLabel">システム音声 🔊</span>
                 <canvas id="sysVisualizer" width="200" height="150"></canvas>
             </div>
@@ -530,22 +530,26 @@
         }
 
         function updateMuteUI() {
-            if (isMicMuted) {
-                micLabel.textContent = "マイク音声 🔇 (MUTE)";
-                micBox.classList.add('muted');
-            } else {
-                micLabel.textContent = "マイク音声 🎤";
-                micBox.classList.remove('muted');
-            }
+		    if (isMicMuted) {
+		        micLabel.textContent = "マイク音声 🔇 (MUTE)";
+		        micBox.setAttribute('aria-label', "マイク音声 🔇 (MUTE)");
+		        micBox.classList.add('muted');
+		    } else {
+		        micLabel.textContent = "マイク音声 🎤";
+		        micBox.setAttribute('aria-label', "マイク音声 🎤");
+		        micBox.classList.remove('muted');
+		    }
 
-            if (isSysMuted) {
-                sysLabel.textContent = "システム音声 🔇 (MUTE)";
-                sysBox.classList.add('muted');
-            } else {
-                sysLabel.textContent = "システム音声 🔊";
-                sysBox.classList.remove('muted');
-            }
-        }
+		    if (isSysMuted) {
+		        sysLabel.textContent = "システム音声 🔇 (MUTE)";
+		        sysBox.setAttribute('aria-label', "システム音声 🔇 (MUTE)");
+		        sysBox.classList.add('muted');
+		    } else {
+		        sysLabel.textContent = "システム音声 🔊";
+		        sysBox.setAttribute('aria-label', "システム音声 🔊");
+		        sysBox.classList.remove('muted');
+		    }
+		}
 
         previewWrapper.addEventListener('click', () => {
             if (!isRecording || !mediaRecorder) return;
