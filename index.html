@@ -571,60 +571,6 @@
             border: 1px solid #333;
         }
 
-        .precheck-overlay {
-            position: absolute;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.6);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 16px;
-            border-radius: 8px;
-            z-index: 50;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        .precheck-overlay.active {
-            display: flex;
-        }
-
-        .precheck-message {
-            color: #fff;
-            font-size: 14px;
-            font-weight: bold;
-            text-align: center;
-            line-height: 1.6;
-        }
-
-        .precheck-buttons {
-            display: flex;
-            gap: 12px;
-        }
-
-        .precheck-btn {
-            padding: 10px 22px;
-            border-radius: 12px;
-            border: none;
-            font-size: 13px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            color: #fff;
-        }
-
-        .precheck-btn.start {
-            background: linear-gradient(135deg, #2ed573, #20a860);
-        }
-
-        .precheck-btn.cancel {
-            background: linear-gradient(135deg, #bdc3c7, #95a5a6);
-        }
-
-        .precheck-btn:hover {
-            transform: scale(1.05);
-        }
     </style>
 </head>
 
@@ -673,13 +619,6 @@
             <div class="preview-wrapper" id="previewWrapper">
                 <video id="previewVideo" autoplay="" muted="" playsinline=""></video>
                 <div class="pause-overlay" id="pauseOverlay">⏸ 録画一時停止中 (クリックで再開)</div>
-                <div class="precheck-overlay" id="preCheckOverlay">
-                    <div class="precheck-message">プレビューを確認してください。<br>問題なければ録画を開始します。</div>
-                    <div class="precheck-buttons">
-                        <button class="precheck-btn start" id="preCheckStartButton">開始する</button>
-                        <button class="precheck-btn cancel" id="preCheckCancelButton">キャンセル</button>
-                    </div>
-                </div>
             </div>
             <div class="visualizer-container hidden" id="visualizerContainer">
                 <div class="visualizer-box" id="micBox" role="button" tabindex="0" aria-label="マイク音声 🎤">
@@ -706,6 +645,7 @@
         let isMicMuted = false;
         let isSysMuted = false;
         let micDisabledForSession = false;
+        let recordingFinalized = false;
         let totalRecordedBytes = 0;
         let writeQueue = Promise.resolve();
         let lockHeartbeatInterval = null;
@@ -734,9 +674,6 @@
         const formatSelect = document.getElementById('formatSelect');
         const qualitySelect = document.getElementById('qualitySelect');
         const micDeviceSelect = document.getElementById('micDeviceSelect');
-        const preCheckOverlay = document.getElementById('preCheckOverlay');
-        const preCheckStartButton = document.getElementById('preCheckStartButton');
-        const preCheckCancelButton = document.getElementById('preCheckCancelButton');
         const micCtx = micCanvas.getContext('2d');
         const sysCtx = sysCanvas.getContext('2d');
 
@@ -752,10 +689,22 @@
             });
         }
 
+        let chunkBackupDisabled = false;
+
         async function saveChunk(chunk) {
-            const db = await initDB();
-            const tx = db.transaction('chunks', 'readwrite');
-            tx.objectStore('chunks').add(chunk);
+            if (chunkBackupDisabled) return;
+            try {
+                const db = await initDB();
+                const tx = db.transaction('chunks', 'readwrite');
+                tx.onerror = () => {
+                    console.error('chunk backup failed, disabling further backups', tx.error);
+                    chunkBackupDisabled = true;
+                };
+                tx.objectStore('chunks').add(chunk);
+            } catch (err) {
+                console.error('chunk backup failed, disabling further backups', err);
+                chunkBackupDisabled = true;
+            }
         }
 
         async function setMeta(key, value) {
@@ -895,7 +844,7 @@
         }
 
         function togglePause() {
-            if (!isRecording || !mediaRecorder || preCheckOverlay.classList.contains('active')) return;
+            if (!isRecording || !mediaRecorder) return;
             if (mediaRecorder.state === 'recording') {
                 mediaRecorder.pause();
                 isPaused = true;
@@ -914,8 +863,7 @@
             updatePauseButtonUI();
         }
 
-        previewWrapper.addEventListener('click', (e) => {
-            if (e.target.closest('#preCheckOverlay')) return;
+        previewWrapper.addEventListener('click', () => {
             togglePause();
         });
 
@@ -955,6 +903,7 @@
             previewWrapper.classList.remove('paused');
             updatePauseButtonUI();
             totalRecordedBytes = 0;
+            chunkBackupDisabled = false;
             updateFileSizeDisplay();
             formatSelect.disabled = true;
             qualitySelect.disabled = true;
@@ -999,7 +948,6 @@
             previewVideo.classList.remove('active');
             previewVideo.srcObject = null;
             visualizerContainer.classList.add('hidden');
-            preCheckOverlay.classList.remove('active');
             if (timerInterval) clearInterval(timerInterval);
             if (backgroundUpdateInterval) { clearInterval(backgroundUpdateInterval); backgroundUpdateInterval = null; }
             if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
@@ -1216,20 +1164,6 @@
             }
         }
 
-        function showPreCheckAndConfirm() {
-            return new Promise((resolve) => {
-                preCheckOverlay.classList.add('active');
-                preCheckStartButton.onclick = () => {
-                    preCheckOverlay.classList.remove('active');
-                    resolve(true);
-                };
-                preCheckCancelButton.onclick = () => {
-                    preCheckOverlay.classList.remove('active');
-                    resolve(false);
-                };
-            });
-        }
-
         function getSupportedRecordingFormat(preferredFormat = 'mp4') {
             const mp4Candidates = [
                 { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', ext: 'mp4', desc: 'MP4 Video' },
@@ -1394,24 +1328,6 @@
                     isSysMuted = false;
                     updateMuteUI();
 
-                    showPreviewUI();
-                    statusText.textContent = 'プレビューを確認してください';
-
-                    const confirmed = await showPreCheckAndConfirm();
-                    if (!confirmed) {
-                        stopRecording();
-                        recordButton.classList.remove('warning');
-                        displayStream.getTracks().forEach(t => t.stop());
-                        if (micStream) micStream.getTracks().forEach(t => t.stop());
-                        if (writableStream) {
-                            try { await writableStream.abort(); } catch (e) { console.error(e); }
-                        }
-                        await clearDB();
-                        statusText.textContent = 'クリックして録画開始';
-                        releaseRecordingLock();
-                        return;
-                    }
-
                     const bitrate = resolveBitrate(qualitySelect.value, videoTrack);
                     const combined = new MediaStream([...displayStream.getVideoTracks(), ...destination.stream.getAudioTracks()]);
                     mediaRecorder = new MediaRecorder(combined, {
@@ -1428,13 +1344,19 @@
                         }
                     };
 
-                    mediaRecorder.onstop = async () => {
+                    recordingFinalized = false;
+
+                    async function finalizeRecording(errorLabel) {
+                        if (recordingFinalized) return;
+                        recordingFinalized = true;
                         try {
                             if (writableStream) {
                                 statusText.textContent = "ファイルを保存中...";
                                 await writeQueue;
                                 await writableStream.close();
-                                statusText.textContent = "✅ 録画が保存されました";
+                                statusText.textContent = errorLabel
+                                    ? `⚠️ エンコードエラーのため録画を終了しました (${errorLabel})`
+                                    : "✅ 録画が保存されました";
                             }
                             clearDB().catch(err => console.error(err));
                         } catch (err) {
@@ -1446,6 +1368,18 @@
                                 if (!isRecording) statusText.textContent = "クリックして録画開始";
                             }, 3000);
                         }
+                    }
+
+                    mediaRecorder.onstop = () => finalizeRecording(null);
+
+                    mediaRecorder.onerror = (event) => {
+                        const errName = event && event.error && event.error.name ? event.error.name : '不明なエラー';
+                        console.error('MediaRecorder error', event && event.error);
+                        if (isRecording) {
+                            stopRecording();
+                            if (displayStream) displayStream.getTracks().forEach(t => t.stop());
+                        }
+                        finalizeRecording(errName);
                     };
 
                     mediaRecorder.start(1000);
