@@ -277,6 +277,23 @@
             transform: scale(0.95);
         }
 
+        .record-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+            filter: grayscale(60%);
+        }
+
+        .record-button:disabled:hover,
+        .record-button:disabled:active {
+            transform: none;
+            box-shadow: 0 8px 25px rgba(149, 165, 166, 0.4);
+        }
+
+        .status.unsupported {
+            color: #c92a2a;
+            font-weight: 700;
+        }
+
         .record-button.recording {
             border-radius: 50%;
             border-color: #ff4757;
@@ -589,7 +606,7 @@
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">クリックして録画開始</span>
             </div>
-            <div class="version">Version 2026.8.24</div>
+            <div class="version">Version 2026.8.26</div>
             <div class="format-select-wrapper">
                 <label for="formatSelect">保存形式:</label>
                 <select id="formatSelect">
@@ -750,6 +767,60 @@
             localStorage.setItem('preferredMicMode', micDeviceSelect.value);
         });
 
+        function checkBrowserSupport() {
+            const support = {
+                mediaRecorder: !!window.MediaRecorder,
+                getDisplayMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia),
+                saveFilePicker: 'showSaveFilePicker' in window,
+                mp4: false,
+                webm: false
+            };
+            if (support.mediaRecorder) {
+                support.mp4 = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=h264,aac', 'video/mp4']
+                    .some(t => MediaRecorder.isTypeSupported(t));
+                support.webm = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+                    .some(t => MediaRecorder.isTypeSupported(t));
+            }
+            return support;
+        }
+
+        function applyBrowserSupport() {
+            const support = checkBrowserSupport();
+            const mp4Option = formatSelect.querySelector('option[value="mp4"]');
+            const webmOption = formatSelect.querySelector('option[value="webm"]');
+
+            if (!support.mp4 && mp4Option) {
+                mp4Option.disabled = true;
+                mp4Option.textContent = 'MP4 (非対応)';
+            }
+            if (!support.webm && webmOption) {
+                webmOption.disabled = true;
+                webmOption.textContent = 'WebM (非対応)';
+            }
+            if (formatSelect.selectedOptions[0] && formatSelect.selectedOptions[0].disabled) {
+                if (support.mp4) formatSelect.value = 'mp4';
+                else if (support.webm) formatSelect.value = 'webm';
+            }
+
+            const canRecord = support.mediaRecorder && support.getDisplayMedia && support.saveFilePicker && (support.mp4 || support.webm);
+
+            if (!canRecord) {
+                recordButton.disabled = true;
+                formatSelect.disabled = true;
+                qualitySelect.disabled = true;
+                micDeviceSelect.disabled = true;
+                statusText.classList.add('unsupported');
+                if (!support.mediaRecorder || !support.getDisplayMedia) {
+                    statusText.textContent = '❌ お使いのブラウザは画面録画に対応していません（更新してください）';
+                } else if (!support.saveFilePicker) {
+                    statusText.textContent = '❌ お使いのブラウザはファイル保存に対応していません（更新してください）';
+                } else {
+                    statusText.textContent = '❌ お使いのブラウザは動画録画形式（MP4/WebM）に対応していません';
+                }
+            }
+            return canRecord;
+        }
+
         window.onload = async function () {
             const savedFormat = localStorage.getItem('preferredFormat') || 'mp4';
             formatSelect.value = savedFormat;
@@ -759,6 +830,9 @@
 
             const savedMicMode = localStorage.getItem('preferredMicMode') || 'on';
             micDeviceSelect.value = savedMicMode;
+
+            const browserSupported = applyBrowserSupport();
+            if (!browserSupported) return;
 
             const isRec = await getMeta('isRecording');
             if (isRec) {
