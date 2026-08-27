@@ -606,7 +606,7 @@
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">クリックして録画開始</span>
             </div>
-            <div class="version">Version 2026.8.26</div>
+            <div class="version">Version 2026.8.27</div>
             <div class="format-select-wrapper">
                 <label for="formatSelect">保存形式:</label>
                 <select id="formatSelect">
@@ -776,7 +776,7 @@
                 webm: false
             };
             if (support.mediaRecorder) {
-                support.mp4 = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=h264,aac', 'video/mp4']
+                support.mp4 = ['video/mp4;codecs=h264,aac', 'video/mp4']
                     .some(t => MediaRecorder.isTypeSupported(t));
                 support.webm = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
                     .some(t => MediaRecorder.isTypeSupported(t));
@@ -1240,7 +1240,6 @@
 
         function getSupportedRecordingFormat(preferredFormat = 'mp4') {
             const mp4Candidates = [
-                { mimeType: 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', ext: 'mp4', desc: 'MP4 Video' },
                 { mimeType: 'video/mp4;codecs=h264,aac', ext: 'mp4', desc: 'MP4 Video' },
                 { mimeType: 'video/mp4', ext: 'mp4', desc: 'MP4 Video' }
             ];
