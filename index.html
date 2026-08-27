@@ -606,7 +606,7 @@
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">クリックして録画開始</span>
             </div>
-            <div class="version">Version 2026.8.27</div>
+            <div class="version">Version 2026.8.28</div>
             <div class="format-select-wrapper">
                 <label for="formatSelect">保存形式:</label>
                 <select id="formatSelect">
@@ -1239,10 +1239,10 @@
         }
 
         function getSupportedRecordingFormat(preferredFormat = 'mp4') {
-            const mp4Candidates = [
-                { mimeType: 'video/mp4;codecs=h264,aac', ext: 'mp4', desc: 'MP4 Video' },
-                { mimeType: 'video/mp4', ext: 'mp4', desc: 'MP4 Video' }
-            ];
+			const mp4Candidates = [
+			    { mimeType: 'video/mp4;codecs=h264,aac', ext: 'mp4', desc: 'MP4 Video' },
+			    { mimeType: 'video/mp4', ext: 'mp4', desc: 'MP4 Video' }
+			];
             const webmCandidates = [
                 { mimeType: 'video/webm;codecs=vp9,opus', ext: 'webm', desc: 'WebM Video' },
                 { mimeType: 'video/webm;codecs=vp8,opus', ext: 'webm', desc: 'WebM Video' },
@@ -1401,8 +1401,18 @@
                     isSysMuted = false;
                     updateMuteUI();
 
+                    // マイクもシステム音声も無い場合、destinationには何も接続されず
+                    // 「実体のない」無音トラックだけが存在する状態になる。これをそのまま
+                    // MediaRecorderに渡すと、MP4のフラグメント化ミュクサーが音声との同期待ちで
+                    // 内部バッファを正しくフラッシュできず、stop時に直近数秒分しか
+                    // 書き出されない不具合が発生するため、実音声ソースがある場合のみ
+                    // 音声トラックを含める。
+                    const hasAudioSource = displayStream.getAudioTracks().length > 0 || (!micDisabledForSession && !!micStream);
                     const bitrate = resolveBitrate(qualitySelect.value, videoTrack);
-                    const combined = new MediaStream([...displayStream.getVideoTracks(), ...destination.stream.getAudioTracks()]);
+                    const combined = new MediaStream([
+                        ...displayStream.getVideoTracks(),
+                        ...(hasAudioSource ? destination.stream.getAudioTracks() : [])
+                    ]);
                     mediaRecorder = new MediaRecorder(combined, {
                         mimeType: recordingFormat.mimeType,
                         videoBitsPerSecond: bitrate
