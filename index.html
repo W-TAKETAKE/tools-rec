@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ja">
-
-<head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<!-- saved from url=(0039)https://w-taketake.github.io/tools-rec/ -->
+<html lang="ja"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>R</title>
+    <link id="faviconLink" rel="icon" type="image/x-icon" href="DesktopRec_LightGreen.ico">
     <style>
         html,
         body {
@@ -606,7 +606,7 @@
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">クリックして録画開始</span>
             </div>
-            <div class="version">Version 2026.8.28</div>
+            <div class="version">Version 2026.9.14</div>
             <div class="format-select-wrapper">
                 <label for="formatSelect">保存形式:</label>
                 <select id="formatSelect">
@@ -670,6 +670,11 @@
         const TAB_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const LOCK_KEY = 'r-recording-lock';
         const LOCK_STALE_MS = 5000;
+
+        const faviconLink = document.getElementById('faviconLink');
+        function setFavicon(iconFile) {
+            if (faviconLink) faviconLink.href = iconFile;
+        }
 
         const recordButton = document.getElementById('recordButton');
         const recordIcon = document.getElementById('recordIcon');
@@ -870,9 +875,6 @@
             const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
             const seconds = (elapsed % 60).toString().padStart(2, '0');
             timerElement.textContent = `${minutes}:${seconds}`;
-            if (isRecording) {
-                document.title = `R-${isPaused ? 'Paused' : 'Running'} (${minutes}:${seconds})`;
-            }
         }
 
         function updateFileSizeDisplay() {
@@ -926,6 +928,7 @@
                 if (timerInterval) clearInterval(timerInterval);
                 previewWrapper.classList.add('paused');
                 statusText.textContent = '⏸ 録画一時停止中';
+                setFavicon('DesktopRec_Yellow.ico');
             } else if (mediaRecorder.state === 'paused') {
                 mediaRecorder.resume();
                 isPaused = false;
@@ -933,6 +936,7 @@
                 timerInterval = setInterval(updateTimer, 1000);
                 previewWrapper.classList.remove('paused');
                 statusText.textContent = '録画中...';
+                setFavicon('DesktopRec_Red.ico');
             }
             updatePauseButtonUI();
         }
@@ -982,7 +986,7 @@
             formatSelect.disabled = true;
             qualitySelect.disabled = true;
             micDeviceSelect.disabled = true;
-            document.title = 'R-Running';
+            setFavicon('DesktopRec_Red.ico');
             document.body.classList.add('recording-active');
             recordButton.classList.add('recording');
             recordIcon.textContent = '■';
@@ -1008,6 +1012,7 @@
             qualitySelect.disabled = false;
             micDeviceSelect.disabled = false;
             document.title = 'R';
+            setFavicon('DesktopRec_LightGreen.ico');
             document.body.classList.remove('recording-active');
             recordButton.classList.remove('recording');
             recordButton.classList.remove('warning');
@@ -1485,6 +1490,6 @@
             }
         });
     </script>
-</body>
 
-</html>
+
+</body></html>
