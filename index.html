@@ -4,7 +4,7 @@
     
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>R</title>
-    <link id="faviconLink" rel="icon" type="image/x-icon" href="DesktopRec_LightGreen.ico">
+    <link id="faviconLink" rel="icon" type="image/x-icon" href="DesktopRec_Blue.ico">
     <style>
         html,
         body {
@@ -662,6 +662,7 @@
         let isMicMuted = false;
         let isSysMuted = false;
         let micDisabledForSession = false;
+        let sysDisabledForSession = false;
         let recordingFinalized = false;
         let totalRecordedBytes = 0;
         let writeQueue = Promise.resolve();
@@ -903,14 +904,21 @@
                 micBox.classList.remove('unavailable');
             }
 
-            if (isSysMuted) {
+            if (sysDisabledForSession) {
+                sysLabel.textContent = "システム音声なし 🚫";
+                sysBox.setAttribute('aria-label', "システム音声なし 🚫");
+                sysBox.classList.remove('muted');
+                sysBox.classList.add('unavailable');
+            } else if (isSysMuted) {
                 sysLabel.textContent = "システム音声 🔇 (MUTE)";
                 sysBox.setAttribute('aria-label', "システム音声 🔇 (MUTE)");
+                sysBox.classList.remove('unavailable');
                 sysBox.classList.add('muted');
             } else {
                 sysLabel.textContent = "システム音声 🔊";
                 sysBox.setAttribute('aria-label', "システム音声 🔊");
                 sysBox.classList.remove('muted');
+                sysBox.classList.remove('unavailable');
             }
         }
 
@@ -928,7 +936,7 @@
                 if (timerInterval) clearInterval(timerInterval);
                 previewWrapper.classList.add('paused');
                 statusText.textContent = '⏸ 録画一時停止中';
-                setFavicon('DesktopRec_Yellow.ico');
+                setFavicon('DesktopRec_LightGreen.ico');
             } else if (mediaRecorder.state === 'paused') {
                 mediaRecorder.resume();
                 isPaused = false;
@@ -957,7 +965,7 @@
         });
 
         sysBox.addEventListener('click', () => {
-            if (!audioContext) return;
+            if (!audioContext || sysDisabledForSession) return;
             isSysMuted = !isSysMuted;
             if (sysGainNode && audioContext) {
                 sysGainNode.gain.setValueAtTime(isSysMuted ? 0 : 1, audioContext.currentTime);
@@ -1007,12 +1015,13 @@
             isMicMuted = false;
             isSysMuted = false;
             micDisabledForSession = false;
+            sysDisabledForSession = false;
             updateMuteUI();
             formatSelect.disabled = false;
             qualitySelect.disabled = false;
             micDeviceSelect.disabled = false;
             document.title = 'R';
-            setFavicon('DesktopRec_LightGreen.ico');
+            setFavicon('DesktopRec_Blue.ico');
             document.body.classList.remove('recording-active');
             recordButton.classList.remove('recording');
             recordButton.classList.remove('warning');
@@ -1057,7 +1066,11 @@
             } else {
                 drawSegmentedEqualizer(micAnalyser, micCtx, micCanvas.width, micCanvas.height, 'red', 80, false, isMicMuted, isPaused);
             }
-            drawSegmentedEqualizer(sysAnalyser, sysCtx, sysCanvas.width, sysCanvas.height, 'green_orange', 10, true, isSysMuted, isPaused);
+            if (sysDisabledForSession) {
+                drawUnavailableBox(sysCtx, sysCanvas.width, sysCanvas.height, '🚫 システム音声なし');
+            } else {
+                drawSegmentedEqualizer(sysAnalyser, sysCtx, sysCanvas.width, sysCanvas.height, 'green_orange', 10, true, isSysMuted, isPaused);
+            }
         }
 
         document.addEventListener('visibilitychange', () => {
@@ -1363,7 +1376,8 @@
                     sysAnalyser.smoothingTimeConstant = 0.7;
                     sysGainNode = audioContext.createGain();
 
-                    if (displayStream.getAudioTracks().length > 0) {
+                    sysDisabledForSession = displayStream.getAudioTracks().length === 0;
+                    if (!sysDisabledForSession) {
                         const sysSource = audioContext.createMediaStreamSource(new MediaStream([displayStream.getAudioTracks()[0]]));
                         sysSource.connect(sysAnalyser);
                         sysAnalyser.connect(sysGainNode);
