@@ -606,7 +606,7 @@
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">クリックして録画開始</span>
             </div>
-            <div class="version">Version 2026.9.14</div>
+            <div class="version">Version 2026.9.18</div>
             <div class="format-select-wrapper">
                 <label for="formatSelect">保存形式:</label>
                 <select id="formatSelect">
@@ -651,7 +651,7 @@
     </div>
 
     <script>
-        let mediaRecorder, displayStream, recordingStartTime, timerInterval;
+        let mediaRecorder, displayStream, micStream, audioDestination, recordingStartTime, timerInterval;
         let isRecording = false;
         let isPaused = false;
         let pauseStartTime = 0;
@@ -1041,12 +1041,65 @@
             if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
             clearCanvas(micCtx, micCanvas);
             clearCanvas(sysCtx, sysCanvas);
-            if (audioContext && audioContext.state !== 'closed') audioContext.close();
+            releaseMediaResources();
         }
 
         function clearCanvas(ctx, canvas) {
             ctx.fillStyle = '#111';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function stopStream(stream) {
+            if (!stream) return;
+            try {
+                stream.getTracks().forEach(t => t.stop());
+            } catch (err) {
+                console.error('stream stop error', err);
+            }
+        }
+
+        // マイク/画面/ミキサーの全キャプチャを解放する。
+        // マイクトラックを停止し忘れるとページがデバイスを掴んだままになり、
+        // 他アプリ(Teams/Meet等)のマイクが無音化したり、次回のgetUserMediaが
+        // 返ってこなくなるため、正常停止・エラー・キャンセルの全経路から必ず通すこと。
+        function releaseMediaResources() {
+            stopStream(micStream);
+            micStream = null;
+            stopStream(displayStream);
+            displayStream = null;
+            if (audioDestination) {
+                stopStream(audioDestination.stream);
+                audioDestination = null;
+            }
+            if (audioContext && audioContext.state !== 'closed') {
+                audioContext.close().catch(err => console.error('audioContext close error', err));
+            }
+            audioContext = null;
+            micAnalyser = null;
+            sysAnalyser = null;
+            micGainNode = null;
+            sysGainNode = null;
+        }
+
+        // タイムアウト後に遅れて解決した場合もストリームを取り漏らさず停止する
+        function withStreamTimeout(promise, ms, timeoutMessage) {
+            let timedOut = false;
+            promise.then(
+                stream => { if (timedOut) stopStream(stream); },
+                () => { /* タイムアウト確定後の遅延エラーは無視 */ }
+            );
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => {
+                    timedOut = true;
+                    const err = new Error(timeoutMessage);
+                    err.name = 'TimeoutError';
+                    reject(err);
+                }, ms);
+                promise.then(
+                    stream => { clearTimeout(timer); resolve(stream); },
+                    err => { clearTimeout(timer); reject(err); }
+                );
+            });
         }
 
         function drawUnavailableBox(ctx, width, height, label) {
@@ -1194,6 +1247,10 @@
                     return '⚠️ 画面共有の選択をキャンセルしました';
                 case 'NotSupportedError':
                     return '❌ お使いのブラウザは対応していません';
+                case 'TimeoutError':
+                    return '❌ デバイスの取得がタイムアウトしました（タブを再読み込みしてください）';
+                case 'NotReadableError':
+                    return '❌ デバイスを他のアプリが使用中です（Teams/Meet を確認してください）';
                 default:
                     return `❌ エラーが発生しました (${err.name})`;
             }
@@ -1321,7 +1378,8 @@
 
         recordButton.addEventListener('click', async () => {
             if (!isRecording) {
-                let micStream = null;
+                // 前回の失敗などで掴んだままのキャプチャが残っていれば先に解放する
+                releaseMediaResources();
                 try {
                     const lockAcquired = await acquireRecordingLock();
                     if (!lockAcquired) {
@@ -1369,7 +1427,8 @@
                     previewVideo.srcObject = displayStream;
 
                     audioContext = new AudioContext();
-                    const destination = audioContext.createMediaStreamDestination();
+                    audioDestination = audioContext.createMediaStreamDestination();
+                    const destination = audioDestination;
 
                     sysAnalyser = audioContext.createAnalyser();
                     sysAnalyser.fftSize = 512;
@@ -1395,12 +1454,18 @@
                         micGainNode = audioContext.createGain();
 
                         try {
-                            micStream = await navigator.mediaDevices.getUserMedia({
-                                audio: {
-                                    echoCancellation: true,
-                                    noiseSuppression: true
-                                }
-                            });
+                            // 音声デバイスが不調な場合 getUserMedia が永久に解決しないことがあるため、
+                            // 必ず打ち切ってマイクなしで録画を開始できるようにする
+                            micStream = await withStreamTimeout(
+                                navigator.mediaDevices.getUserMedia({
+                                    audio: {
+                                        echoCancellation: true,
+                                        noiseSuppression: true
+                                    }
+                                }),
+                                15000,
+                                'マイクの取得がタイムアウトしました'
+                            );
                             const micSource = audioContext.createMediaStreamSource(micStream);
                             const hpFilter = audioContext.createBiquadFilter();
                             hpFilter.type = 'highpass';
@@ -1411,7 +1476,12 @@
                             micGainNode.connect(destination);
                             statusText.textContent = "🎤 システム音声 + マイク";
                         } catch (e) {
-                            statusText.textContent = "⚠️ システム音声のみ";
+                            console.error('mic acquisition failed', e);
+                            micStream = null;
+                            micDisabledForSession = true;
+                            statusText.textContent = e && e.name === 'TimeoutError'
+                                ? "⚠️ マイク取得タイムアウト → システム音声のみで録画"
+                                : "⚠️ システム音声のみ";
                             recordButton.classList.add('warning');
                         }
                     }
